@@ -66,10 +66,10 @@ window.__ModuleLoader__.load({
       "settings.tab.context": "上下文",
       "context.clear": "清空上下文",
       "context.clear.hint":
-        "把当前会话的全部历史替换为一条占位记录（会话与日志完整保留）",
+        "把当前会话的全部历史替换为一条占位记录（会话与日志完整保留）。需要会话空闲，运行中点击会被拒绝。",
       "context.compact": "压缩上下文",
       "context.compact.hint":
-        "启动子代理，用配置的提示词把全部历史压缩成一条摘要",
+        "启动子代理把已完成的历史压缩成一条摘要。会话运行中也能用：压缩期间新产生的对话原样保留，接在摘要之后。",
       "settings.models.title": "模型价格",
       "settings.models.hint":
         "按百万 tokens 计价，四项分开填写：未命中缓存的输入、命中缓存的读取、写入缓存、输出。供应商不收取的项填 0。命中价不是固定 10%——DeepSeek 只有 2%，填错会把缓存密集的账单高估数倍。打开峰谷开关后，这四项价格都按所选方案区分高峰期与空闲期。",
@@ -304,10 +304,10 @@ window.__ModuleLoader__.load({
       "settings.tab.context": "Context",
       "context.clear": "Clear context",
       "context.clear.hint":
-        "Replace the whole session history with one placeholder record (session and log stay intact)",
+        "Replace the whole session history with one placeholder record (session and log stay intact). The session must be idle; a click mid-turn is refused.",
       "context.compact": "Compact context",
       "context.compact.hint":
-        "Spawn a subagent that compresses the whole history with the configured prompt",
+        "Let a subagent compress the completed history into one summary. Works mid-conversation: whatever the session writes while it runs stays verbatim behind the summary.",
       "settings.models.title": "Model prices",
       "settings.models.hint":
         "Priced per million tokens, four items apart: uncached input, cache-hit input, cache write, output. Enter 0 for anything a provider does not bill. The cache-hit rate is not a flat 10% — DeepSeek charges 2%, and assuming otherwise overstates a cache-heavy bill several times over. Turning on peak pricing scales all four rates by the schedule.",

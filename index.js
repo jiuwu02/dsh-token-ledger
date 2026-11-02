@@ -548,6 +548,12 @@ export function apply(ctx, config) {
    * appends `command/run` and `command/done` itself; both are log-only, which
    * is what keeps the report out of the model's context while still landing
    * it in the transcript.
+   *
+   * Nothing here waits for an idle agent. Compacting replaces a span behind
+   * the running step and is safe mid-turn; clearing needs the idle session it
+   * refuses to run without, and says so in the transcript when it does not
+   * get one. Waiting here would hold the request open until the turn ended,
+   * which is the pause that made compaction awkward in the first place.
    * @param op - `clear` or `compact`.
    * @param agent - the live agent owning the session.
    * @returns the report text, or a refusal when the runtime is unavailable.

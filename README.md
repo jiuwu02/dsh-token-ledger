@@ -32,9 +32,10 @@ third-party dependency is required.
   sessions that actually changed.
 - **Holiday auto-update** — any year is fetched at runtime and cached, so a new year needs no new build.
 - **Context actions** — Clear (orange) and Compact (green) buttons in the dock under the composer, plus the
-  `/clear-context` and `/compact-context` commands. Compact drives a subagent with an editable prompt and
-  replaces the session surface with its summary, reusing the platform's own "context compacted" marker with
-  the item and token counts.
+  `/clear-context` and `/compact-context` commands. Compact runs mid-conversation: it fixes a cut before
+  summarizing, so every step taken while the subagent works stays verbatim behind the summary, and the
+  checkpoint reuses the platform's own "context compacted" marker with the item and token counts. Clear
+  replaces the whole surface and therefore requires an idle session.
 - **Bilingual** — Chinese and English follow the platform locale.
 
 ## Requirements
@@ -163,14 +164,18 @@ Two buttons sit in the dock under the composer, in the same row as the context-u
 **Clear context** (orange) on the left and **Compact context** (green) on the right. Both are also slash
 commands — `/clear-context` and `/compact-context` — so they work without the mouse.
 
-Both replace the session's whole surface with a single checkpoint. The session and its log are untouched: the
-events stay on disk, the surface just no longer shows them, which is what frees the context window.
+They differ in what they replace. Clear takes the whole surface and therefore needs an idle session: a step
+appending during the rewrite would be dropped with the history it belongs to. Compact takes only the span it
+selected *before* summarizing — up to the last cut that does not split a tool-call/result pair — so it works
+mid-conversation, and everything written while the subagent runs is replayed verbatim behind the checkpoint.
+The session and its log are untouched either way: the events stay on disk, the surface just no longer shows
+the replaced part, which is what frees the context window.
 
 - **Clear** writes a one-line placeholder. It is not a summary: nothing before the next message is retained.
-- **Compact** starts a subagent that reads the entire conversation and writes a summary, then replaces the
-  history with it. The subagent inherits the session's provider and model unless the Context tab overrides them.
-  It runs before the rewrite, so the long model call does not hold the session; the replacement itself is a
-  synchronous, idle-only transaction.
+- **Compact** starts a subagent that reads the conversation and writes a summary, then replaces the cut with
+  it. The subagent inherits the session's provider and model unless the Context tab overrides them. Because a
+  fork only inherits *completed* turns, a span that reaches into the running turn is rendered to the subagent
+  as text instead — otherwise it would summarize a history missing the very messages being replaced.
 
 After either one, the transcript shows one command card and **no duplicate note under the buttons**. The two
 report genuinely different things: Clear gives the item and token counts before and after the swap, Compact
@@ -196,7 +201,12 @@ That tab has three more things about how much window is left:
 - Compaction **measures first**. A history already past two thirds of the summarizer's window makes the child
   start from zero context with a head-and-tail excerpt instead of inheriting everything, and the omitted middle
   is marked explicitly. That is the fix for long conversations that used to hang: such a request is larger than
-  any model can read, so retrying it could never have worked.
+  any model can read, so retrying it could never have worked. When the span being compacted reaches into the
+  running turn, the excerpt renders that span rather than the whole surface, so the summary covers exactly what
+  the checkpoint will replace.
+- The **compaction lock** is opened before the summarizer is called, not after. A second request then answers
+  "already in flight" instead of paying for the same summary twice, and the platform's own engine backs off
+  rather than racing this one.
 
 Clearing an already-cleared session is a no-op that reports success: rewriting one placeholder with another
 identical one is not an error.
