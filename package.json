@@ -1,0 +1,58 @@
+{
+  "name": "dsh-token-ledger",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Token usage ledger for DSH: totals, cache hit rate, peak/off-peak cost, calendar heatmap, session tree, workspaces, and CSV/JSON export.",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "token",
+    "usage",
+    "cost",
+    "billing"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jiuwu02/dsh-token-ledger.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jiuwu02/dsh-token-ledger/issues"
+  },
+  "homepage": "https://github.com/jiuwu02/dsh-token-ledger#readme",
+  "engines": {
+    "dsh": ">=0.2.1-rc.3"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib/",
+    "cordis.patch.yml",
+    "locale/en.json",
+    "locale/zh.json",
+    "icon.svg",
+    "README.md",
+    "README.zh-CN.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  }
+}
