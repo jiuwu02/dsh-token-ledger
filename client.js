@@ -14,7 +14,14 @@ window.__ModuleLoader__.load({
     // require it the same way), which is why a portal is available to us at all.
     const ReactDOM = require("react-dom");
     const h = React.createElement;
-    const { useCallback, useEffect, useMemo, useRef, useState } = React;
+    const {
+      useCallback,
+      useEffect,
+      useLayoutEffect,
+      useMemo,
+      useRef,
+      useState,
+    } = React;
 
     /** Panel identity, shared by the sidebar row and the main slot key. */
     const PANEL_ID = "dsh-token-ledger";
@@ -186,7 +193,8 @@ window.__ModuleLoader__.load({
       "stat.offPeak": "空闲时段",
       "stat.peakHint": "{tokens} tokens · {cost}",
       "stat.offPeakHint": "{tokens} tokens · {cost}",
-      "cost.rule": "高峰 {peak} · 空闲 {offPeak}",
+      "cost.rulePeak": "高峰 {peak}",
+      "cost.ruleOffPeak": "空闲 {offPeak}",
       "cost.unpriced": "{models} 无定价，按默认价计算",
       "stat.tokens": "tokens",
       "heat.title": "使用热力图",
@@ -429,7 +437,8 @@ window.__ModuleLoader__.load({
       "stat.offPeak": "Off-peak",
       "stat.peakHint": "{tokens} tokens · {cost}",
       "stat.offPeakHint": "{tokens} tokens · {cost}",
-      "cost.rule": "Peak {peak} · off-peak {offPeak}",
+      "cost.rulePeak": "Peak {peak}",
+      "cost.ruleOffPeak": "Off-peak {offPeak}",
       "cost.unpriced": "{models} unpriced, billed at the default rate",
       "stat.tokens": "tokens",
       "heat.title": "Usage heatmap",
@@ -1044,9 +1053,22 @@ window.__ModuleLoader__.load({
 .dts-seg button:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-brand-primary)}
 .dts-stats{display:grid;gap:10px;margin-top:16px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 .dts-stat{padding:12px 14px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}
+/* A band-tinted card: the number is the signal, so the value takes the colour
+   and the border only hints at it. Tinting the whole surface would make two
+   adjacent cards fight, and the label would lose contrast on both. */
+.dts-stat-peak .dts-statValue{color:var(--dsw-alias-state-error-primary)}
+.dts-stat-peak{border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 38%,var(--dsw-alias-border-l1))}
+.dts-stat-offPeak .dts-statValue{color:var(--dsw-alias-state-success-primary)}
+.dts-stat-offPeak{border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 38%,var(--dsw-alias-border-l1))}
 .dts-statLabel{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
 .dts-statValue{margin-top:4px;font-size:22px;font-weight:600;line-height:28px;font-variant-numeric:tabular-nums}
 .dts-statHint{margin-top:2px;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:16px;font-variant-numeric:tabular-nums}
+/* The cost card's rule line prints both bands; each half keeps the colour the
+   rest of the panel gives that band. The separator stays secondary so the two
+   figures do not read as one long coloured string. */
+.dts-hintPeak{color:var(--dsw-alias-state-error-primary)}
+.dts-hintOffPeak{color:var(--dsw-alias-state-success-primary)}
+.dts-hintSep{color:var(--dsw-alias-label-secondary)}
 .dts-card{margin-top:16px;padding:16px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}
 .dts-cardHead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
 .dts-cardTitle{margin:0;font-size:14px;font-weight:500;line-height:22px}
@@ -1077,7 +1099,7 @@ window.__ModuleLoader__.load({
 /* The hover card has a fixed width rather than a shrink-to-fit one: its left
    edge is computed from this number, so a card that grew with its content would
    shift under the pointer as the user moved between cells. */
-.dts-tip{z-index:10;position:absolute;box-sizing:border-box;width:180px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-2);box-shadow:0 8px 20px rgb(0 0 0 / 20%);pointer-events:none;font-size:12px;line-height:18px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
+.dts-tip{z-index:10;position:absolute;box-sizing:border-box;width:max-content;min-width:180px;max-width:280px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-2);box-shadow:0 8px 20px rgb(0 0 0 / 20%);pointer-events:none;font-size:12px;line-height:18px;font-variant-numeric:tabular-nums;white-space:nowrap}
 /* The heatmap wraps its grid in a scroller, so a tip laid out against the grid
    would be clipped by it. Anchoring it to the card keeps it above the scroll
    area and in the same coordinate space the trend chart's tip uses. */
@@ -1086,6 +1108,13 @@ window.__ModuleLoader__.load({
 .dts-tipRow{display:flex;align-items:center;justify-content:space-between;gap:14px}
 .dts-tipRow strong{font-weight:600}
 .dts-swatch{display:inline-block;width:8px;height:8px;margin-right:6px;border-radius:2px;background:var(--dsw-alias-brand-primary)}
+/* Peak and off-peak carry one colour each everywhere they appear — the tip
+   rows, the stat cards, the trend line — so the same two hues mean the same
+   thing wherever the eye lands. Red is the expensive band, green the cheap one. */
+.dts-swatchPeak{background:var(--dsw-alias-state-error-primary)}
+.dts-swatchOffPeak{background:var(--dsw-alias-state-success-primary)}
+.dts-tipPeak strong{color:var(--dsw-alias-state-error-primary)}
+.dts-tipOffPeak strong{color:var(--dsw-alias-state-success-primary)}
 .dts-models{margin-top:12px;display:flex;flex-direction:column;gap:8px}
 .dts-model{display:flex;align-items:center;gap:12px;width:100%;box-sizing:border-box;padding:5px 7px;border:none;border-radius:7px;background:none;color:inherit;font:inherit;font-size:12px;text-align:left;cursor:pointer}
 .dts-model:hover{background:var(--dsw-alias-bg-layer-1)}
@@ -1381,11 +1410,22 @@ window.__ModuleLoader__.load({
       );
     }
 
-    /** One headline number. */
-    function Stat({ label, value, hint }) {
+    /**
+     * One headline number.
+     *
+     * `tone` names a billing band. A peak figure is printed in the same red the
+     * trend line uses for peak segments and the same red the hover card's peak
+     * row carries, so "expensive" is one colour across the whole panel rather
+     * than a word the user has to read each time; off-peak is the matching
+     * green. Neutral figures leave it undefined and inherit the normal ink.
+     */
+    function Stat({ label, value, hint, tone }) {
       return h(
         "div",
-        { className: "dts-stat" },
+        {
+          className:
+            tone === undefined ? "dts-stat" : `dts-stat dts-stat-${tone}`,
+        },
         h("div", { className: "dts-statLabel" }, label),
         h("div", { className: "dts-statValue" }, value),
         hint === undefined
@@ -1402,18 +1442,34 @@ window.__ModuleLoader__.load({
      * and hovering the trend line feel like the same interaction, and sharing
      * the markup is what makes that true rather than merely similar.
      *
-     * `left` is already clamped by the caller, which knows its own width; the
-     * `max-width` here stops a long title or a wide currency code from pushing
-     * the box past the viewport on a narrow screen.
+     * The card sizes itself to its content. It used to be a fixed 180px wide
+     * with `overflow: hidden`, which silently clipped any number long enough to
+     * matter — an uncached-input count of 117,469,xxx was cut to
+     * "117,469," — so the width now follows the widest row and `max-width`
+     * keeps a pathological one from running off the card. Because the width is
+     * no longer known before layout, `bounds` gives the caller's container
+     * width and a measured correction keeps the right edge inside it: `left`
+     * stays the preferred edge, and the card is nudged left only when its
+     * content would overflow.
+     * @param props - the title, the rows, and the anchor plus container width.
      */
     const TIP_WIDTH = 180;
 
-    function HoverCard({ title, rows, left, top }) {
+    function HoverCard({ title, rows, left, top, bounds }) {
+      const ref = useRef(null);
+      const [shift, setShift] = useState(0);
+      useLayoutEffect(() => {
+        const node = ref.current;
+        if (node === null) return;
+        const overflow = left + node.offsetWidth - (bounds ?? Infinity);
+        setShift(overflow > 0 ? Math.ceil(overflow) : 0);
+      });
       return h(
         "div",
         {
           className: "dts-tip",
-          style: { left, top },
+          ref,
+          style: { left: left - shift, top },
           role: "tooltip",
           "aria-hidden": "true",
         },
@@ -1421,13 +1477,25 @@ window.__ModuleLoader__.load({
         rows.map((row) =>
           h(
             "div",
-            { key: row.label, className: "dts-tipRow" },
+            {
+              key: row.label,
+              className:
+                row.tone === "peak"
+                  ? "dts-tipRow dts-tipPeak"
+                  : row.tone === "offPeak"
+                    ? "dts-tipRow dts-tipOffPeak"
+                    : "dts-tipRow",
+            },
             h(
               "span",
               null,
               row.swatch === true
                 ? h("span", { className: "dts-swatch" })
-                : null,
+                : row.swatch === "peak"
+                  ? h("span", { className: "dts-swatch dts-swatchPeak" })
+                  : row.swatch === "offPeak"
+                    ? h("span", { className: "dts-swatch dts-swatchOffPeak" })
+                    : null,
               row.label,
             ),
             h("strong", null, row.value),
@@ -4004,14 +4072,14 @@ window.__ModuleLoader__.load({
         if (wrap === null) return;
         const box = wrap.getBoundingClientRect();
         const cell = event.currentTarget.getBoundingClientRect();
-        // Clamp so the card never leaves the wrapper: without this it would run
-        // off the right edge near the end of a week row on a narrow window.
-        const left = Math.min(
-          Math.max(
-            Math.round(cell.left - box.left + cell.width / 2 - TIP_WIDTH / 2),
-            0,
-          ),
-          Math.max(0, Math.round(box.width - TIP_WIDTH)),
+        // Centre the card on the cell, then let it run to whichever edge has
+        // room. The width is decided by the content, so the only clamp that can
+        // be applied here is the one that keeps the left edge inside the
+        // wrapper; `HoverCard` nudges itself back from the right edge once it
+        // has been laid out and knows how wide it actually is.
+        const left = Math.max(
+          0,
+          Math.round(cell.left - box.left + cell.width / 2 - TIP_WIDTH / 2),
         );
         // Below the cell by default; above it when the cell sits close to the
         // bottom of the card, or the card would spill onto the next one. The
@@ -4024,7 +4092,7 @@ window.__ModuleLoader__.load({
           below < estimated + 12
             ? Math.max(0, Math.round(cell.top - box.top - estimated - 8))
             : Math.round(cell.bottom - box.top + 8);
-        setTip({ key, row, left, top });
+        setTip({ key, row, left, top, bounds: box.width });
       };
 
       return { wrapRef, tip, show, hide: () => setTip(null) };
@@ -4111,6 +4179,7 @@ window.__ModuleLoader__.load({
               title: tip.key,
               left: tip.left,
               top: tip.top,
+              bounds: tip.bounds,
               rows: [
                 { label: t("heat.tokens"), value: formatInt(tip.row[5]) },
                 { label: t("heat.cost"), value: cost(tip.row[7], currency) },
@@ -4208,6 +4277,7 @@ window.__ModuleLoader__.load({
               title: tip.key,
               left: tip.left,
               top: tip.top,
+              bounds: tip.bounds,
               rows: [
                 { label: t("heat.tokens"), value: formatInt(tip.row[5]) },
                 { label: t("heat.cost"), value: cost(tip.row[7], currency) },
@@ -4226,6 +4296,13 @@ window.__ModuleLoader__.load({
      * The label carries exactly as much as the bucket does: a year needs only
      * the year, a month the month, a day the date, and an hour has to name the
      * hour or two points a day apart would read the same.
+     *
+     * Every clock-shaped answer is padded to `HH:00`. The key is `YYYY-MM-DDTHH`
+     * with no minutes, and printing it bare left the axis reading `06`, `07`,
+     * `08` — which looks like a count rather than a time, and is why the trend
+     * card's hour axis looked different from the "24h" and "today" ones that
+     * carried the same keys. `09` and `09:00` are the same instant; only one of
+     * them reads as a clock.
      * @param key - the bucket key.
      * @param grain - the grain the row was folded to.
      * @returns the text under the axis.
@@ -4234,9 +4311,47 @@ window.__ModuleLoader__.load({
       // An hour key is `YYYY-MM-DDTHH`, so the hour is the tail. A day or week
       // key is a date, so dropping the year keeps the label short. A month or
       // year key is already as short as it can be without losing meaning.
-      if (grain === "hour") return key.slice(11);
+      if (grain === "hour") return `${key.slice(11, 13)}:00`;
       if (grain === "day" || grain === "week") return key.slice(5);
       return key;
+    }
+
+    /**
+     * The heading the hover card shows for one bucket.
+     *
+     * It is the axis label with the date restored: the axis drops the year and,
+     * on a coarse grain, the day, because a row of those under one chart is
+     * read together; a tooltip is read alone, so it says the whole date. The
+     * hour is padded the same way the axis is — `2026-11-02 09` leaves the
+     * reader wondering whether the number is an hour or a count, and a range
+     * that crosses midnight has two `09` points whose only difference is the
+     * date in front of them.
+     * @param key - the bucket key.
+     * @param grain - the grain the row was folded to.
+     * @returns the tooltip title.
+     */
+    function trendTitle(key, grain) {
+      if (grain === "hour") return `${key.slice(0, 10)} ${key.slice(11, 13)}:00`;
+      return key;
+    }
+
+    /**
+     * Which billing band one trend bucket falls in.
+     *
+     * A bucket is peak when it billed anything at the peak rate, off-peak when
+     * it billed anything at the off-peak rate, and neutral when the schedule
+     * did not apply at all (no peak profile on any model in the range). The
+     * chart only colours a bucket it can actually name: a mixed bucket is a
+     * peak one, because the expensive half is what the user is looking for.
+     * @param row - one fifteen-column trend row.
+     * @returns `peak`, `off` or `null`.
+     */
+    function bandOf(row) {
+      const peak = typeof row[12] === "number" ? row[12] : 0;
+      const all = typeof row[5] === "number" ? row[5] : 0;
+      if (peak > 0) return "peak";
+      if (all > 0) return "off";
+      return null;
     }
 
     /** Line chart with a hover readout. */
@@ -4271,16 +4386,38 @@ window.__ModuleLoader__.load({
       const yAt = (value) =>
         pad.top + plotHeight - (value / yPeak) * plotHeight;
 
-      const line = rows
-        .map(
-          (row, index) =>
-            `${index === 0 ? "M" : "L"}${xAt(index).toFixed(2)},${yAt(row[5]).toFixed(2)}`,
-        )
-        .join(" ");
+      // One sub-path per band instead of one path for the series. A bucket
+      // belongs to the band that billed it, and drawing the segment that
+      // leaves that bucket in its colour is what makes a glance at the line
+      // answer "when was this expensive" without reading the axis. `bandOf`
+      // returns null when no peak schedule applied, in which case every
+      // segment falls back to the brand colour and the line looks as it did.
+      const segments = [];
+      for (let index = 0; index < rows.length - 1; index += 1) {
+        const band = bandOf(rows[index]);
+        const from = `${xAt(index).toFixed(2)},${yAt(rows[index][5]).toFixed(2)}`;
+        const to = `${xAt(index + 1).toFixed(2)},${yAt(rows[index + 1][5]).toFixed(2)}`;
+        const last = segments[segments.length - 1];
+        // Consecutive buckets in the same band extend one path, so a long
+        // stretch is one stroke with one join rather than a chain of dashes.
+        if (last !== undefined && last.band === band) last.d += ` L${to}`;
+        else segments.push({ band, d: `M${from} L${to}` });
+      }
+      const strokeOf = (band) =>
+        band === "peak"
+          ? "var(--dsw-alias-state-error-primary)"
+          : band === "off"
+            ? "var(--dsw-alias-state-success-primary)"
+            : "var(--dsw-alias-brand-primary)";
       const area =
         rows.length === 0
           ? ""
-          : `${line} L${xAt(rows.length - 1).toFixed(2)},${pad.top + plotHeight} L${xAt(0).toFixed(2)},${pad.top + plotHeight} Z`;
+          : `${rows
+              .map(
+                (row, index) =>
+                  `${index === 0 ? "M" : "L"}${xAt(index).toFixed(2)},${yAt(row[5]).toFixed(2)}`,
+              )
+              .join(" ")} L${xAt(rows.length - 1).toFixed(2)},${pad.top + plotHeight} L${xAt(0).toFixed(2)},${pad.top + plotHeight} Z`;
 
       const ticks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => ({
         value: yPeak * ratio,
@@ -4323,15 +4460,12 @@ window.__ModuleLoader__.load({
       if (rows.length === 0)
         return h("div", { className: "dts-empty" }, t("trend.empty"));
 
-      // The card has a fixed width, so it is clamped against the measured chart
-      // width rather than a guessed one; a narrow window keeps it inside.
-      const tipLeft =
-        active === null
-          ? 0
-          : Math.min(
-              Math.max(xAt(hover) - TIP_WIDTH / 2, 0),
-              Math.max(0, width - TIP_WIDTH),
-            );
+      // The card is centred on the hovered point and only pulled back from the
+      // left edge here; the right edge is handled by `HoverCard` itself, which
+      // measures its own width and nudges left by the overflow. Clamping to a
+      // guessed width at this point would move a wide card in before it needed
+      // to, which is exactly the bug the fixed-width card used to hide.
+      const tipLeft = active === null ? 0 : Math.max(xAt(hover) - TIP_WIDTH / 2, 0);
 
       return h(
         "div",
@@ -4391,14 +4525,17 @@ window.__ModuleLoader__.load({
           ),
           xLabels,
           h("path", { d: area, fill: "url(#dts-area)" }),
-          h("path", {
-            d: line,
-            fill: "none",
-            stroke: "var(--dsw-alias-brand-primary)",
-            strokeWidth: "2",
-            strokeLinejoin: "round",
-            strokeLinecap: "round",
-          }),
+          segments.map((segment, index) =>
+            h("path", {
+              key: `${segment.band ?? "none"}-${index}`,
+              d: segment.d,
+              fill: "none",
+              stroke: strokeOf(segment.band),
+              strokeWidth: "2",
+              strokeLinejoin: "round",
+              strokeLinecap: "round",
+            }),
+          ),
           rows.length <= 80
             ? rows.map((row, index) =>
                 h("circle", {
@@ -4406,7 +4543,7 @@ window.__ModuleLoader__.load({
                   cx: xAt(index),
                   cy: yAt(row[5]),
                   r: index === hover ? 4 : 2.5,
-                  fill: "var(--dsw-alias-brand-primary)",
+                  fill: strokeOf(bandOf(row)),
                   stroke: "var(--dsw-alias-bg-layer-1)",
                   strokeWidth: "1.5",
                 }),
@@ -4431,9 +4568,10 @@ window.__ModuleLoader__.load({
               // The bucket key is the whole title, hour key included: a range
               // that spans midnight has two `09` points and the tooltip has to
               // say which day it is reporting.
-              title: active[0].replace("T", " "),
+              title: trendTitle(active[0], grain),
               left: tipLeft,
               top: 8,
+              bounds: width,
               rows: [
                 {
                   label: t("heat.tokens"),
@@ -4441,6 +4579,32 @@ window.__ModuleLoader__.load({
                   swatch: true,
                 },
                 { label: t("heat.cost"), value: cost(active[7], currency) },
+                // The two bands are the cost row's split, so they sit directly
+                // under it rather than at the bottom of the card. Index 14 is
+                // the bucket's peak cost and 7 its cost overall — 9 would be
+                // peak *output tokens*, a number of the right shape that would
+                // report money never spent. A bucket with no peak schedule on
+                // its model omits both rather than printing zeroes that would
+                // read as free usage.
+                ...(bandOf(active) === null
+                  ? []
+                  : [
+                      {
+                        label: t("stat.peak"),
+                        value: cost(active[14] ?? 0, currency),
+                        swatch: "peak",
+                        tone: "peak",
+                      },
+                      {
+                        label: t("stat.offPeak"),
+                        value: cost(
+                          (active[7] ?? 0) - (active[14] ?? 0),
+                          currency,
+                        ),
+                        swatch: "offPeak",
+                        tone: "offPeak",
+                      },
+                    ]),
                 { label: t("stat.input"), value: formatInt(active[1]) },
                 { label: t("stat.output"), value: formatInt(active[2]) },
                 { label: t("stat.cacheRead"), value: formatInt(active[3]) },
@@ -4823,15 +4987,43 @@ window.__ModuleLoader__.load({
         else if (grain === "hour") setGrain("day");
       };
 
-      /** Apply a hand-picked pair of dates, which no preset describes. */
+      /**
+       * Apply a hand-picked pair of dates, which no preset describes.
+       *
+       * A span of one day is plotted by hour, exactly like the "today" and
+       * "24h" presets. The reason is the same one that makes those presets
+       * hour-grained: a single day folded by date is one point on the chart,
+       * and one point says nothing about a day's shape. So picking the same
+       * date twice is read as "this day, hour by hour" rather than as a range
+       * that happens to be one pixel wide.
+       *
+       * The hour span covers midnight to 23:00 of the picked day, except when
+       * that day is today — then it stops at the current hour, because the
+       * hours that have not happened yet would draw a flat tail that reads as
+       * inactivity rather than as absence of data.
+       */
       const applyCustom = (nextFrom, nextTo) => {
         setPreset("");
+        if (nextFrom !== "" && nextFrom === nextTo) {
+          const now = new Date();
+          const end = nextTo === dayKey(now) ? hourKey(now) : `${nextTo}T23`;
+          setRange({
+            from: nextFrom,
+            to: nextTo,
+            hours: { from: `${nextFrom}T00`, to: end },
+          });
+          setGrain("hour");
+          return;
+        }
         setRange({ from: nextFrom, to: nextTo, hours: null });
         if (grain === "hour") setGrain("day");
       };
 
-      const exportRows = () =>
-        grain === "hour" || grain === "day" ? rows : foldGrain(rows, grain);
+      // The export follows the chart rather than the day list: it is the same
+      // series, folded the same way, so the file a user opens describes the
+      // picture they were looking at. Reading `rows` here wrote one line per
+      // day even under an hour grain, because `rows` is always day rows.
+      const exportRows = () => trendRows;
 
       const exportJson = () => {
         const payload = {
@@ -5040,12 +5232,29 @@ window.__ModuleLoader__.load({
           value: cost(billing.cost, billing.currency),
           hint:
             billing.unpriced.length === 0
-              ? t("cost.rule")
-                  .replace("{peak}", cost(billing.peakCost, billing.currency))
-                  .replace(
-                    "{offPeak}",
-                    cost(billing.offPeakCost, billing.currency),
-                  )
+              ? [
+                  // The rule line is the one place both bands are printed side
+                  // by side, so each share takes its band colour here too —
+                  // otherwise the summary reads as one undifferentiated number
+                  // and the red/green figures elsewhere have no counterpart.
+                  h(
+                    "span",
+                    { key: "peak", className: "dts-hintPeak" },
+                    t("cost.rulePeak").replace(
+                      "{peak}",
+                      cost(billing.peakCost, billing.currency),
+                    ),
+                  ),
+                  h("span", { key: "sep", className: "dts-hintSep" }, " · "),
+                  h(
+                    "span",
+                    { key: "offPeak", className: "dts-hintOffPeak" },
+                    t("cost.ruleOffPeak").replace(
+                      "{offPeak}",
+                      cost(billing.offPeakCost, billing.currency),
+                    ),
+                  ),
+                ]
               : t("cost.unpriced").replace(
                   "{models}",
                   billing.unpriced.join(", "),
@@ -5064,6 +5273,7 @@ window.__ModuleLoader__.load({
           hint: t("stat.peakHint")
             .replace("{tokens}", formatCompact(billing.peakTokens))
             .replace("{cost}", cost(billing.peakCost, billing.currency)),
+          tone: "peak",
         }),
         h(Stat, {
           label: t("stat.offPeak"),
@@ -5071,6 +5281,7 @@ window.__ModuleLoader__.load({
           hint: t("stat.offPeakHint")
             .replace("{tokens}", formatCompact(billing.offPeakTokens))
             .replace("{cost}", cost(billing.offPeakCost, billing.currency)),
+          tone: "offPeak",
         }),
         h(Stat, {
           label: t("stat.input"),
