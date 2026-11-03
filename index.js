@@ -1,5 +1,5 @@
 /**
- * dsh-token-ledger — Host half.
+ * dsh-token-panorama — Host half.
  *
  * Reads every stored session's event log through the `sessionPersistence`
  * service, folds the `usage` carried by each `assistant/message` event into
@@ -31,7 +31,7 @@ import {
   measureContext,
   optimizePrompt,
 } from "./lib/contextops.js";
-export const name = "dsh-token-ledger";
+export const name = "dsh-token-panorama";
 // `commands` joins the list because the two context commands are registered at
 // apply time, and `tokenMeter`/`agents` because the context operations read them
 // directly: a service is only readable once declared, and the failure mode is a
@@ -247,7 +247,7 @@ export function apply(ctx, config) {
       // logged and the turn continues — the same tradeoff the platform's engine
       // makes when it warns and returns `next()`.
       ctx.logger?.warn?.(
-        `dsh-token-ledger: automatic compaction skipped: ${String(error)}`,
+        `dsh-token-panorama: automatic compaction skipped: ${String(error)}`,
       );
       return false;
     }
@@ -269,7 +269,7 @@ export function apply(ctx, config) {
         await autoCompactStep(payload?.agent);
       } catch (error) {
         ctx.logger?.warn?.(
-          `dsh-token-ledger: pre-step compaction failed: ${String(error)}`,
+          `dsh-token-panorama: pre-step compaction failed: ${String(error)}`,
         );
       }
       return typeof next === "function" ? next() : undefined;
@@ -934,7 +934,7 @@ export function apply(ctx, config) {
             });
           } catch (error) {
             ctx.logger?.warn?.(
-              `dsh-token-ledger: ${ROUTE}/${method} failed: ${String(error)}`,
+              `dsh-token-panorama: ${ROUTE}/${method} failed: ${String(error)}`,
             );
             writeJson(res, 500, {
               ok: false,
@@ -946,7 +946,7 @@ export function apply(ctx, config) {
           }
         },
       }),
-    "dsh-token-ledger: usage route",
+    "dsh-token-panorama: usage route",
   );
 }
 

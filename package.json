@@ -1,9 +1,9 @@
 {
-  "name": "dsh-token-ledger",
+  "name": "dsh-token-panorama",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Token usage ledger for DSH: totals, cache hit rate, peak/off-peak cost, calendar heatmap, session tree, workspaces, and CSV/JSON export.",
+  "description": "Token panorama for DSH: totals, cache hit rate, peak/off-peak cost, calendar heatmap, session tree, workspaces, CSV/JSON export, plus context clear/compact actions and prompt optimization.",
   "keywords": [
     "dsh",
     "dsh-plugin",
@@ -15,12 +15,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jiuwu02/dsh-token-ledger.git"
+    "url": "git+https://github.com/jiuwu02/dsh-token-panorama.git"
   },
   "bugs": {
-    "url": "https://github.com/jiuwu02/dsh-token-ledger/issues"
+    "url": "https://github.com/jiuwu02/dsh-token-panorama/issues"
   },
-  "homepage": "https://github.com/jiuwu02/dsh-token-ledger#readme",
+  "homepage": "https://github.com/jiuwu02/dsh-token-panorama#readme",
   "engines": {
     "dsh": ">=0.2.1-rc.3"
   },

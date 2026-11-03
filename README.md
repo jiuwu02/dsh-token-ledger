@@ -1,7 +1,8 @@
-# Token Ledger for DSH
+# Token Panorama for DSH
 
-A DeepSeek Harness bundle that aggregates every session's token usage into one panel: lifetime totals, a
-calendar heatmap, a trend chart, a per-model breakdown, a per-session usage table, and CSV/JSON export.
+A DeepSeek Harness bundle that shows where every session's tokens go: one panel with lifetime totals, a
+calendar heatmap, a trend chart, a per-model breakdown, a per-session usage table, and CSV/JSON export. Two
+tool groups come with it: context clear/compact buttons, and a prompt optimization button.
 
 Everything is read from the platform's own session persistence service, so nothing is scraped from logs and no
 third-party dependency is required.
@@ -57,13 +58,13 @@ directory (the folder containing `package.json`):
 plugin_manager install_bundle target="<absolute path to this directory>"
 ```
 
-After installation the sidebar shows a **Token Ledger** entry; selecting it opens the main panel.
+After installation the sidebar shows a **Token Panorama** entry; selecting it opens the main panel.
 
-To remove it, uninstall the `dsh-token-ledger` bundle from the Plugins page.
+To remove it, uninstall the `dsh-token-panorama` bundle from the Plugins page.
 
 ## Usage
 
-1. Select **Token Ledger** in the sidebar.
+1. Select **Token Panorama** in the sidebar.
 2. Choose a range from the filter bar, or type a `From` / `To` pair.
 3. Switch the heatmap between `Week` and `Month`, and the trend between `Hour` / `Day` / `Week` /
    `Month` / `Year` (`Hour` appears only on a sub-day range).
@@ -275,7 +276,7 @@ no such service or no matching row, the window degrades to read-only and says wh
   report is shown as a top-level entry rather than dropped.
 - **Buckets**: usage is keyed by the local calendar day of the event timestamp; billing additionally splits by
   hour, converted through the configured zone.
-- **Cache**: the folded result is written to `~/.dsh/storages/dsh-token-ledger/usage-cache.json`
+- **Cache**: the folded result is written to `~/.dsh/storages/dsh-token-panorama/usage-cache.json`
   (`CACHE_VERSION = 3`), written atomically via a temp file and rename.
 - **Accuracy**: totals are exactly the sum of the underlying `usage` records; the panel never estimates. Session
   rows follow the selected range, their sum over any day equals that day's heatmap figure exactly, and the

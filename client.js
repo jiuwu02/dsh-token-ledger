@@ -1,5 +1,5 @@
 /**
- * dsh-token-ledger — Client half.
+ * dsh-token-panorama — Client half.
  *
  * Registers one sidebar icon plus the main panel it opens. Everything the
  * panel shows is folded from the Host's day buckets on the client, so changing
@@ -7,7 +7,7 @@
  */
 
 window.__ModuleLoader__.load({
-  id: "dsh-token-ledger",
+  id: "dsh-token-panorama",
   factory(require) {
     const React = require("react");
     // `react-dom` is a platform seed module (the shell's own client packages
@@ -29,9 +29,9 @@ window.__ModuleLoader__.load({
     const snapshotNoop = () => undefined;
 
     /** Panel identity, shared by the sidebar row and the main slot key. */
-    const PANEL_ID = "dsh-token-ledger";
+    const PANEL_ID = "dsh-token-panorama";
     /** Locale namespace owned by this plugin. */
-    const NS = "dsh-token-ledger";
+    const NS = "dsh-token-panorama";
     /**
      * The bound translator, captured when the plugin applies.
      *
@@ -44,8 +44,8 @@ window.__ModuleLoader__.load({
     //#region i18n
 
     const ZH = {
-      "nav.label": "Token 账本",
-      "page.title": "Token 用量账本",
+      "nav.label": "Token 全景",
+      "page.title": "Token 用量全景",
       "page.subtitle": "基于会话日志聚合，覆盖主会话与子代理。",
       "action.refresh": "刷新",
       "action.refreshing": "刷新中…",
@@ -297,8 +297,8 @@ window.__ModuleLoader__.load({
     };
 
     const EN = {
-      "nav.label": "Token Ledger",
-      "page.title": "Token Ledger",
+      "nav.label": "Token Panorama",
+      "page.title": "Token Panorama",
       "page.subtitle":
         "Aggregated from session logs, subagent sessions included.",
       "action.refresh": "Refresh",
@@ -832,7 +832,7 @@ window.__ModuleLoader__.load({
      * happen. The prefix also makes the entries obvious when a user opens the
      * storage inspector to clear them.
      */
-    const PREF_PREFIX = "dsh-token-ledger.";
+    const PREF_PREFIX = "dsh-token-panorama.";
 
     /**
      * Read a stored preference.
@@ -2063,7 +2063,7 @@ window.__ModuleLoader__.load({
        */
       const exportConfig = () => {
         const payload = {
-          kind: "dsh-token-ledger/billing",
+          kind: "dsh-token-panorama/billing",
           version: 1,
           exportedAt: new Date().toISOString(),
           timeZone: draft.timeZone ?? doc?.value?.timeZone ?? "Asia/Shanghai",
@@ -2104,7 +2104,7 @@ window.__ModuleLoader__.load({
               throw new Error(t("settings.importInvalid"));
             if (
               parsed.kind !== undefined &&
-              parsed.kind !== "dsh-token-ledger/billing"
+              parsed.kind !== "dsh-token-panorama/billing"
             )
               throw new Error(t("settings.importInvalid"));
             const next = {
@@ -6070,7 +6070,7 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         ctx.effect(
           () => ctx.locale.register(NS, { zh: ZH, en: EN }),
-          "dsh-token-ledger: locale dictionaries",
+          "dsh-token-panorama: locale dictionaries",
         );
         const t = ctx.locale.bind(NS);
         boundT = t;
@@ -6084,7 +6084,7 @@ window.__ModuleLoader__.load({
           style.textContent = CSS;
           document.head.appendChild(style);
           return () => style.remove();
-        }, "dsh-token-ledger: stylesheet");
+        }, "dsh-token-panorama: stylesheet");
         ctx.effect(
           () =>
             ctx.slots.inject("main", () =>
@@ -6120,7 +6120,7 @@ window.__ModuleLoader__.load({
                 };
               }),
             ),
-          "dsh-token-ledger: panels",
+          "dsh-token-panorama: panels",
         );
         ctx.effect(
           () =>
@@ -6130,7 +6130,7 @@ window.__ModuleLoader__.load({
                   name: "conversation.composer.dock",
                   // Namespaced so the id cannot collide with a shipped entry;
                   // a fresh id is added beside them rather than replacing one.
-                  id: "dsh-token-ledger.context-actions",
+                  id: "dsh-token-panorama.context-actions",
                   order: 100,
                   locale: NS,
                   // Session-scoped slot: the framework passes the session the
@@ -6140,7 +6140,7 @@ window.__ModuleLoader__.load({
                 ContextActions,
               ),
             ),
-          "dsh-token-ledger: context actions",
+          "dsh-token-panorama: context actions",
         );
         // The optimize button lives in the composer's toolbar row — the same
         // row as the attach button and the mode chips — via the
@@ -6159,7 +6159,7 @@ window.__ModuleLoader__.load({
               ctx.slots.register(
                 {
                   name: "conversation.input.left",
-                  id: "dsh-token-ledger.optimize-prompt",
+                  id: "dsh-token-panorama.optimize-prompt",
                   order: 50,
                   locale: NS,
                   inject: (sessionId) => {
@@ -6187,7 +6187,7 @@ window.__ModuleLoader__.load({
                 OptimizeButton,
               ),
             ),
-          "dsh-token-ledger: optimize prompt button",
+          "dsh-token-panorama: optimize prompt button",
         );
       },
     };

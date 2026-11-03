@@ -1,7 +1,7 @@
-# Token Ledger for DSH（Token 账本 · 中文说明）
+# Token Panorama for DSH（Token 全景 · 中文说明）
 
-一个 DeepSeek Harness 功能插件：把全部会话的 token 用量汇总成一个面板，包含累计总量、日历热力图、趋势曲线、
-模型分布、逐会话用量明细，以及 CSV / JSON 导出。
+一个 DeepSeek Harness 功能插件，看清全部会话的 token 去向：一个面板汇总累计总量、日历热力图、趋势曲线、
+模型分布、逐会话用量明细，以及 CSV / JSON 导出。另带两组工具：上下文清理 / 压缩按钮，以及提示词优化按钮。
 
 数据全部来自平台自带的会话持久化服务，不解析日志文件，也不依赖任何第三方库。
 
@@ -51,7 +51,7 @@ plugin_manager install_bundle target="<本目录的绝对路径>"
 
 安装后侧边栏出现 **Token 统计** 入口，点击即可打开主面板。
 
-卸载：在「插件」页面卸载 `dsh-token-ledger` 即可。
+卸载：在「插件」页面卸载 `dsh-token-panorama` 即可。
 
 ## 使用
 
@@ -226,7 +226,7 @@ provider 与模型，留空即沿用会话的。默认提示词要求写清目�
 - **工作区**：取会话头事件（`type: "session"`）里的 `cwd`；没有 cwd 的会话归到「(无工作区)」。
 - **父子关系**：取会话头里的 `parentSession`。父会话不在本次统计内时，该子代理按顶层条目展示。
 - **时间桶**：按事件时间戳所处的本地日历日归类；计费额外按小时划分，小时桶用配置时区换算。
-- **缓存**：折叠结果写入 `~/.dsh/storages/dsh-token-ledger/usage-cache.json`（`CACHE_VERSION = 3`），
+- **缓存**：折叠结果写入 `~/.dsh/storages/dsh-token-panorama/usage-cache.json`（`CACHE_VERSION = 3`），
   通过临时文件 + 重命名原子写入。
 - **准确性**：总量严格等于底层 `usage` 记录之和，面板不做任何估算；会话行跟随所选时间范围，
   各会话在该范围内的用量之和与热力图对应日期完全一致；成本按小时计价后汇入日、模型与会话三个维度，
