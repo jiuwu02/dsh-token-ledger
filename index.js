@@ -514,6 +514,7 @@ export function apply(ctx, config) {
         optimizerPrompt: config?.optimizerPrompt ?? "",
         optimizerProvider: config?.optimizerProvider ?? "",
         optimizerModel: config?.optimizerModel ?? "",
+        optimizerUseContext: config?.optimizerUseContext === true,
       },
       override,
       editable: editor !== undefined && entry !== undefined,
@@ -588,6 +589,7 @@ export function apply(ctx, config) {
     prompt: config?.optimizerPrompt ?? "",
     provider: config?.optimizerProvider ?? "",
     model: config?.optimizerModel ?? "",
+    useContext: config?.optimizerUseContext === true,
   });
 
   /**

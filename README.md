@@ -39,7 +39,9 @@ third-party dependency is required.
   compaction. Clear replaces the whole surface and therefore requires an idle session.
 - **Prompt optimization** — an Optimize button resident in the input box toolbar sends the draft to
   a configurable optimizer model and pastes the rewrite back into the composer; attachments are untouched.
-  The instruction and route are configured on the **General** settings tab.
+  Optionally the request carries an excerpt of the current session's context, so a prompt that says
+  "this function" rewrites into one that names it. Instruction, route and the context toggle are
+  configured on the **Prompt optimization** settings tab.
 - **Bilingual** — Chinese and English follow the platform locale.
 
 ## Requirements
@@ -86,13 +88,14 @@ in the panel header** to edit them online; saving re-prices immediately, with no
 
 The window edits the config **by structure**, not by field name: model prices are a table, peak
 schedules are reusable profiles, and holidays are a checklist — none of which a generic key/value editor can
-express. It has four tabs:
+express. It has five tabs:
 
 | Tab | Contents |
 | --- | --- |
 | **Models & prices** | One row per model with four independent price inputs — miss input, cache-hit input, cache write, output — plus the peak toggle with its schedule picker and the delete button pinned to the right edge |
 | **Peak schedules** | Reusable profiles: name, automatic mode, any number of start–end windows, off-peak ratio |
 | **Holidays** | Calendars shipped with the plugin; tick to enable |
+| **Prompt optimization** | The optimizer instruction, its model route, and whether the request carries an excerpt of the session's context |
 | **General** | Billing time zone and currency |
 
 The window can **export** the billing configuration to JSON and **import** a shared one; an import only

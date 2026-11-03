@@ -54,7 +54,8 @@ window.__ModuleLoader__.load({
       "action.exportJson": "导出 JSON",
       "action.settings": "常规设置",
       "settings.title": "常规设置",
-      "settings.hint": "时区、币种、价格时段与节假日决定成本估算；提示词优化在“通用”页配置。保存后立即生效。",
+      "settings.hint":
+        "时区、币种、价格时段与节假日决定成本估算；提示词优化与上下文设置在各自的标签页配置。保存后立即生效。",
       "settings.readonly": "当前 profile 不支持在线编辑配置，仅可查看。",
       "settings.save": "保存",
       "settings.saving": "保存中…",
@@ -76,6 +77,7 @@ window.__ModuleLoader__.load({
       "settings.tab.holidays": "节假日",
       "settings.tab.general": "通用",
       "settings.tab.context": "上下文",
+      "settings.tab.optimizer": "提示词优化",
       "context.clear": "清空上下文",
       "context.clear.hint":
         "把当前会话的全部历史替换为一条占位记录（会话与日志完整保留）。需要会话空闲，运行中点击会被拒绝。",
@@ -184,6 +186,10 @@ window.__ModuleLoader__.load({
         "输入框工具栏的「优化提示词」按钮把这段指令连同草稿一起交给优化模型，由它写出替换用的提示词。",
       "settings.fieldDesc.optimizerProvider": "留空则沿用当前会话的 provider。",
       "settings.fieldDesc.optimizerModel": "留空则沿用当前会话的模型。",
+      "settings.field.optimizerUseContext": "根据上下文优化提示词",
+      "settings.fieldDesc.optimizerUseContext":
+        "开启后，请求会附带当前会话上下文的摘录，改写会贴合正在进行的任务；摘录随每次点击发送，额外消耗 token。",
+      "settings.optimizer.contextUnavailable": "当前会话暂无可提供的上下文。",
       "settings.placeholder.inherit": "继承会话设置",
       "settings.fieldEmpty": "未设置",
       "range.label": "时间范围",
@@ -304,7 +310,7 @@ window.__ModuleLoader__.load({
       "action.settings": "General settings",
       "settings.title": "General settings",
       "settings.hint":
-        "Time zone, currency, peak windows and holidays decide the cost estimate; prompt optimization lives on the General tab. Saving applies immediately.",
+        "Time zone, currency, peak windows and holidays decide the cost estimate; prompt optimization and context settings live on their own tabs. Saving applies immediately.",
       "settings.readonly":
         "This profile cannot edit the config online; values are read-only.",
       "settings.save": "Save",
@@ -330,6 +336,7 @@ window.__ModuleLoader__.load({
       "settings.tab.holidays": "Holidays",
       "settings.tab.general": "General",
       "settings.tab.context": "Context",
+      "settings.tab.optimizer": "Prompt optimization",
       "context.clear": "Clear context",
       "context.clear.hint":
         "Replace the whole session history with one placeholder record (session and log stay intact). The session must be idle; a click mid-turn is refused.",
@@ -445,6 +452,10 @@ window.__ModuleLoader__.load({
       "settings.fieldDesc.optimizerProvider":
         "Empty keeps the session's provider.",
       "settings.fieldDesc.optimizerModel": "Empty keeps the session's model.",
+      "settings.field.optimizerUseContext": "Optimize with context",
+      "settings.fieldDesc.optimizerUseContext":
+        "When on, the request carries an excerpt of the current session's context so the rewrite fits the ongoing task; the excerpt is sent on every click and costs extra tokens.",
+      "settings.optimizer.contextUnavailable": "The current session has no context to attach.",
       "settings.placeholder.inherit": "inherit from the session",
       "settings.fieldEmpty": "not set",
       "range.label": "Range",
@@ -2261,6 +2272,7 @@ window.__ModuleLoader__.load({
         ["peaks", "settings.tab.peaks"],
         ["holidays", "settings.tab.holidays"],
         ["context", "settings.tab.context"],
+        ["optimizer", "settings.tab.optimizer"],
         ["general", "settings.tab.general"],
       ];
 
@@ -2402,6 +2414,17 @@ window.__ModuleLoader__.load({
                         onToggle: toggleHoliday,
                         onRefresh: refreshHolidays,
                         refreshing,
+                      })
+                    : null,
+                  section === "optimizer"
+                    ? h(OptimizerTab, {
+                        draft,
+                        doc,
+                        editable,
+                        t,
+                        pressure,
+                        onPatch: (patch) =>
+                          setDraft((current) => ({ ...current, ...patch })),
                       })
                     : null,
                   section === "general"
@@ -3275,15 +3298,13 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * The general tab: the two enumerable settings, then the prompt-optimizer
-     * block the composer's optimize button reads.
-     *
-     * The optimizer fields mirror the context tab's shape — one instruction
-     * textarea, two catalog pickers — because the two features share one
-     * mental model ("what the plugin sends to a model on your behalf"); only
-     * the config keys differ.
+     * The general tab: the two enumerable settings that decide the cost
+     * estimate. The prompt-optimizer fields moved to their own tab, which
+     * mirrors the context tab's shape — one instruction textarea, two catalog
+     * pickers — because the two features share one mental model ("what the
+     * plugin sends to a model on your behalf"); only the config keys differ.
      */
-    function GeneralTab({ draft, doc, editable, t, onCurrency, onZone, onPatch }) {
+    function GeneralTab({ draft, doc, editable, t, onCurrency, onZone }) {
       const zone =
         typeof draft.timeZone === "string" && draft.timeZone !== ""
           ? draft.timeZone
@@ -3343,17 +3364,24 @@ window.__ModuleLoader__.load({
             t,
           }),
         ),
-        h(OptimizerFields, { draft, doc, editable, t, onPatch }),
       );
     }
 
     /**
-     * The prompt-optimizer fields: the instruction the optimizer model reads,
-     * and the route it runs on, shared by the optimize button above the input
-     * box. Structurally a copy of the context tab's prompt + route block —
-     * same catalog, same inherit-when-empty rule — keyed on optimizer*.
+     * The prompt-optimizer tab: the instruction the optimizer model reads,
+     * the route it runs on, and whether the request also carries an excerpt
+     * of the session's context. Same shape as the context tab — prompt, the
+     * provider/model grid, then the toggle — because the two features share
+     * one mental model ("what the plugin sends to a model on your behalf");
+     * only the config keys and the toggle's meaning differ.
+     *
+     * The context readout reuses the context tab's pressure numbers rather
+     * than a second measurement: it is what the excerpt would be drawn from,
+     * and one source of truth cannot disagree with itself. When the pressure
+     * service is unavailable the tab still works — the toggle stays usable,
+     * the excerpt just starts from whatever the surface holds.
      */
-    function OptimizerFields({ draft, doc, editable, t, onPatch }) {
+    function OptimizerTab({ draft, doc, editable, t, onPatch, pressure }) {
       const fallback = doc?.value ?? {};
       const prompt =
         typeof draft.optimizerPrompt === "string"
@@ -3367,6 +3395,10 @@ window.__ModuleLoader__.load({
         typeof draft.optimizerModel === "string"
           ? draft.optimizerModel
           : (fallback.optimizerModel ?? "");
+      const useContext =
+        typeof draft.optimizerUseContext === "boolean"
+          ? draft.optimizerUseContext
+          : (fallback.optimizerUseContext ?? false);
       const groups = Array.isArray(doc?.models?.groups)
         ? doc.models.groups
         : [];
@@ -3394,6 +3426,12 @@ window.__ModuleLoader__.load({
             });
         return [{ value: "", label: t("settings.placeholder.inherit") }, ...rows];
       }, [groups, provider, t]);
+
+      const ratio =
+        pressure?.available === true && typeof pressure.ratio === "number"
+          ? pressure.ratio
+          : null;
+      const percentUsed = ratio === null ? null : Math.round(ratio * 100);
       return h(
         "div",
         { className: "dts-section" },
@@ -3422,6 +3460,88 @@ window.__ModuleLoader__.load({
             spellCheck: false,
             onChange: (event) => onPatch({ optimizerPrompt: event.target.value }),
           }),
+        ),
+        // The context readout sits above the switch that acts on it, so the
+        // state the excerpt is drawn from is visible while it is set.
+        h(
+          "div",
+          { className: "dts-field" },
+          h(
+            "div",
+            { className: "dts-fieldHead" },
+            h(
+              "span",
+              { className: "dts-fieldKey" },
+              t("settings.context.title"),
+            ),
+            ratio === null
+              ? null
+              : h(
+                  "span",
+                  { className: "dts-fieldValue" },
+                  `${percentUsed}%`,
+                ),
+          ),
+          pressure?.available !== true
+            ? h(
+                "p",
+                { className: "dts-fieldDesc" },
+                t("settings.optimizer.contextUnavailable"),
+              )
+            : h(
+                React.Fragment,
+                null,
+                h(
+                  "p",
+                  { className: "dts-fieldDesc" },
+                  h(
+                    "span",
+                    null,
+                    `${t("settings.context.used")} ${formatInt(pressure.totalTokens)}`,
+                  ),
+                  pressure.contextWindow === null
+                    ? ` · ${t("settings.context.noWindow")}`
+                    : ` / ${formatInt(pressure.contextWindow)}`,
+                ),
+                ratio === null
+                  ? null
+                  : h(
+                      "div",
+                      { className: "dts-fill" },
+                      h("div", {
+                        className: "dts-fillBar",
+                        "data-tone":
+                          ratio >= 0.75 ? "warn" : ratio >= 0.5 ? "busy" : "idle",
+                        style: { width: `${Math.min(100, percentUsed)}%` },
+                      }),
+                    ),
+              ),
+        ),
+        h(
+          "div",
+          { className: "dts-field" },
+          h(
+            "div",
+            { className: "dts-fieldHead" },
+            h(
+              "span",
+              { className: "dts-fieldKey" },
+              t("settings.field.optimizerUseContext"),
+            ),
+            h("input", {
+              type: "checkbox",
+              className: "dts-check",
+              checked: useContext,
+              disabled: !editable,
+              onChange: (event) =>
+                onPatch({ optimizerUseContext: event.target.checked }),
+            }),
+          ),
+          h(
+            "p",
+            { className: "dts-fieldDesc" },
+            t("settings.fieldDesc.optimizerUseContext"),
+          ),
         ),
         h(
           "div",
