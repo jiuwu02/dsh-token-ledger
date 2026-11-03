@@ -29,6 +29,7 @@ import {
   clearContext,
   compactContext,
   measureContext,
+  optimizePrompt,
 } from "./lib/contextops.js";
 export const name = "dsh-token-ledger";
 // `commands` joins the list because the two context commands are registered at
@@ -508,6 +509,11 @@ export function apply(ctx, config) {
         autoCompact: config?.autoCompact ?? false,
         autoCompactThreshold: config?.autoCompactThreshold ?? 0.75,
         splitCompaction: config?.splitCompaction === true,
+        // Same story as the compact* block: read raw so the modal shows what
+        // the optimizer will actually read next time.
+        optimizerPrompt: config?.optimizerPrompt ?? "",
+        optimizerProvider: config?.optimizerProvider ?? "",
+        optimizerModel: config?.optimizerModel ?? "",
       },
       override,
       editable: editor !== undefined && entry !== undefined,
@@ -571,6 +577,20 @@ export function apply(ctx, config) {
   });
 
   /**
+   * The prompt-optimizer knobs the composer button reads.
+   *
+   * Same accessor-per-consumer discipline as {@link compactOptions}: the HTTP
+   * route must run on the instruction the modal last saved, not on a default
+   * captured when this instance booted.
+   * @returns the instruction and the optional provider/model override.
+   */
+  const optimizerOptions = () => ({
+    prompt: config?.optimizerPrompt ?? "",
+    provider: config?.optimizerProvider ?? "",
+    model: config?.optimizerModel ?? "",
+  });
+
+  /**
    * The slash command each dock button replays.
    *
    * The two buttons are buttons, not slash-command shortcuts a user has to
@@ -581,6 +601,8 @@ export function apply(ctx, config) {
    * of the model's context is the platform's own command lifecycle, so the
    * button runs the very same CommandRuntime the typed command does.
    */
+  // "compact" is only usable when the alias registration below actually won
+  // the name; the let binding lets the registration report which one landed.
   const COMMAND_OF_OP = { clear: "clear-context", compact: "compact-context" };
 
   /**
@@ -667,6 +689,25 @@ export function apply(ctx, config) {
   // Both commands share one shape: resolve the agent from the invocation, run
   // the operation, and answer in the transcript. `definitionId` is omitted
   // because it is optional and this plugin imports no platform package.
+  const compactHandler = async (invocation) => {
+    try {
+      return {
+        kind: "success",
+        text: await runContextOp(
+          "compact",
+          invocation.agent,
+          invocation.commandId,
+        ),
+      };
+    } catch (error) {
+      return {
+        kind: "error",
+        text: t("report.compactFailed", {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      };
+    }
+  };
   ctx.get("commands")?.register?.({
     name: "clear-context",
     description: t("command.clear.description"),
@@ -692,29 +733,33 @@ export function apply(ctx, config) {
       }
     },
   });
+  // The compaction command is registered under both names: "compact" is the
+  // name the chat UI special-cases — a checkpoint correlated with it folds
+  // into the one merged "manual compaction" card, so the marker and the report
+  // stop being two stacked rows — while "compact-context" stays for sessions
+  // and notes that still reference the original name.
+  let compactName = "compact-context";
+  try {
+    ctx.get("commands")?.register?.({
+      name: "compact",
+      description: t("command.compact.description"),
+      handler: compactHandler,
+    });
+    compactName = "compact";
+  } catch {
+    // The name is taken (some profiles ship their own /compact): keep both
+    // cards unmerged, which is how this plugin rendered before the alias
+    // existed, rather than failing the whole registration.
+  }
   ctx.get("commands")?.register?.({
     name: "compact-context",
     description: t("command.compact.description"),
-    handler: async (invocation) => {
-      try {
-        return {
-          kind: "success",
-          text: await runContextOp(
-            "compact",
-            invocation.agent,
-            invocation.commandId,
-          ),
-        };
-      } catch (error) {
-        return {
-          kind: "error",
-          text: t("report.compactFailed", {
-            error: error instanceof Error ? error.message : String(error),
-          }),
-        };
-      }
-    },
+    handler: compactHandler,
   });
+  // The dock buttons replay the alias when it exists: a /compact invocation
+  // carries the command id on every compaction event, so the chat renders the
+  // one merged card instead of a report row stacked above the marker.
+  COMMAND_OF_OP.compact = compactName;
 
   ctx.effect(
     () =>
@@ -817,6 +862,41 @@ export function apply(ctx, config) {
               // cached: the whole point is to show the current surface.
               const value = await contextPressure(body.sessionId);
               writeJson(res, 200, { ok: true, value });
+              return;
+            }
+            if (method === "optimizePrompt") {
+              // The composer's optimize button: like the dock buttons, the
+              // Client only knows the session id, so the agent is resolved
+              // here. Unlike them it must not touch the transcript — the
+              // draft is not part of the model's context — so this is a
+              // direct call, not a command replay, and the only thing that
+              // travels back is the rewritten text.
+              if (typeof body.text !== "string" || body.text.trim() === "") {
+                writeJson(res, 400, {
+                  ok: false,
+                  error: {
+                    code: "invalid",
+                    message: "a non-empty prompt text is required",
+                  },
+                });
+                return;
+              }
+              const agent = agentForSession(ctx, body.sessionId);
+              if (agent === undefined) {
+                writeJson(res, 404, {
+                  ok: false,
+                  error: {
+                    code: "no-session",
+                    message: "no live agent for that session",
+                  },
+                });
+                return;
+              }
+              const text = await optimizePrompt(ctx, agent, {
+                ...optimizerOptions(),
+                text: body.text,
+              });
+              writeJson(res, 200, { ok: true, value: { text } });
               return;
             }
             if (method === "saveConfig") {

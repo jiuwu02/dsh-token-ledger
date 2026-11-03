@@ -21,7 +21,12 @@ window.__ModuleLoader__.load({
       useMemo,
       useRef,
       useState,
+      useSyncExternalStore,
     } = React;
+
+    /** No-op store face for renders before the input shell resolves. */
+    const subscribeNoop = () => () => {};
+    const snapshotNoop = () => undefined;
 
     /** Panel identity, shared by the sidebar row and the main slot key. */
     const PANEL_ID = "dsh-token-ledger";
@@ -47,9 +52,9 @@ window.__ModuleLoader__.load({
       "action.export": "导出",
       "action.exportCsv": "导出 CSV",
       "action.exportJson": "导出 JSON",
-      "action.settings": "计费设置",
-      "settings.title": "计费设置",
-      "settings.hint": "价格、时段与节假日决定成本估算；保存后立即重新计价。",
+      "action.settings": "常规设置",
+      "settings.title": "常规设置",
+      "settings.hint": "时区、币种、价格时段与节假日决定成本估算；提示词优化在“通用”页配置。保存后立即生效。",
       "settings.readonly": "当前 profile 不支持在线编辑配置，仅可查看。",
       "settings.save": "保存",
       "settings.saving": "保存中…",
@@ -77,6 +82,10 @@ window.__ModuleLoader__.load({
       "context.compact": "压缩上下文",
       "context.compact.hint":
         "启动子代理把已完成的历史压缩成一条摘要。会话运行中也能用：压缩期间新产生的对话原样保留，接在摘要之后。",
+      "optimize.button": "优化提示词",
+      "optimize.hint":
+        "把输入框里的提示词交给优化模型改写：目标更明确、约束更完整，只改提示词本身，不动附件与图片。",
+      "optimize.working": "优化中…",
       "settings.models.title": "模型价格",
       "settings.models.hint":
         "按百万 tokens 计价，四项分开填写：未命中缓存的输入、命中缓存的读取、写入缓存、输出。供应商不收取的项填 0。命中价不是固定 10%——DeepSeek 只有 2%，填错会把缓存密集的账单高估数倍。打开峰谷开关后，这四项价格都按所选方案区分高峰期与空闲期。",
@@ -168,6 +177,13 @@ window.__ModuleLoader__.load({
         "「压缩上下文」命令与绿色按钮把这段指令连同全部历史交给子代理，由它写出替换用的摘要。",
       "settings.fieldDesc.compactProvider": "留空则沿用当前会话的 provider。",
       "settings.fieldDesc.compactModel": "留空则沿用当前会话的模型。",
+      "settings.field.optimizerPrompt": "提示词优化指令",
+      "settings.field.optimizerProvider": "优化模型 Provider",
+      "settings.field.optimizerModel": "优化模型",
+      "settings.fieldDesc.optimizerPrompt":
+        "输入框工具栏的「优化提示词」按钮把这段指令连同草稿一起交给优化模型，由它写出替换用的提示词。",
+      "settings.fieldDesc.optimizerProvider": "留空则沿用当前会话的 provider。",
+      "settings.fieldDesc.optimizerModel": "留空则沿用当前会话的模型。",
       "settings.placeholder.inherit": "继承会话设置",
       "settings.fieldEmpty": "未设置",
       "range.label": "时间范围",
@@ -230,8 +246,8 @@ window.__ModuleLoader__.load({
       "trend.hourHint": "时间范围缩到一天以内，横轴自动切换为小时。",
       "model.title": "模型分布",
       "model.hint": "按累计消耗排序，点击某个模型只看它的用量。",
-      "model.focused": "已筛选：{model}，下方所有统计只统计该模型。",
-      "model.focusedSessions": "已筛选：{model}，仅显示用过该模型的会话。",
+      "model.focused":
+        "已筛选 {model}：下方统计只计该模型，会话列表也仅显示用过它的会话。",
       "model.clear": "显示全部",
       "model.empty": "所选范围内没有记录。",
       "model.unknown": "未知模型",
@@ -285,10 +301,10 @@ window.__ModuleLoader__.load({
       "action.export": "Export",
       "action.exportCsv": "Export CSV",
       "action.exportJson": "Export JSON",
-      "action.settings": "Billing settings",
-      "settings.title": "Billing settings",
+      "action.settings": "General settings",
+      "settings.title": "General settings",
       "settings.hint":
-        "Prices, peak windows and holidays decide the cost estimate; saving re-prices immediately.",
+        "Time zone, currency, peak windows and holidays decide the cost estimate; prompt optimization lives on the General tab. Saving applies immediately.",
       "settings.readonly":
         "This profile cannot edit the config online; values are read-only.",
       "settings.save": "Save",
@@ -320,6 +336,10 @@ window.__ModuleLoader__.load({
       "context.compact": "Compact context",
       "context.compact.hint":
         "Compress the completed history into one summary with a direct model call. Works mid-conversation: whatever the session writes while it runs stays verbatim behind the summary.",
+      "optimize.button": "Optimize prompt",
+      "optimize.hint":
+        "Send the draft in the input box to the optimizer model: a clearer goal, fuller constraints. Only the prompt text changes; attachments and images are untouched.",
+      "optimize.working": "Optimizing…",
       "settings.models.title": "Model prices",
       "settings.models.hint":
         "Priced per million tokens, four items apart: uncached input, cache-hit input, cache write, output. Enter 0 for anything a provider does not bill. The cache-hit rate is not a flat 10% — DeepSeek charges 2%, and assuming otherwise overstates a cache-heavy bill several times over. Turning on peak pricing scales all four rates by the schedule.",
@@ -417,6 +437,14 @@ window.__ModuleLoader__.load({
       "settings.fieldDesc.compactProvider":
         "Empty keeps the session's provider.",
       "settings.fieldDesc.compactModel": "Empty keeps the session's model.",
+      "settings.field.optimizerPrompt": "Prompt optimization instruction",
+      "settings.field.optimizerProvider": "Optimizer model provider",
+      "settings.field.optimizerModel": "Optimizer model",
+      "settings.fieldDesc.optimizerPrompt":
+        "The optimize button in the input box toolbar sends this instruction, then the draft; the model writes the replacement prompt.",
+      "settings.fieldDesc.optimizerProvider":
+        "Empty keeps the session's provider.",
+      "settings.fieldDesc.optimizerModel": "Empty keeps the session's model.",
       "settings.placeholder.inherit": "inherit from the session",
       "settings.fieldEmpty": "not set",
       "range.label": "Range",
@@ -482,9 +510,7 @@ window.__ModuleLoader__.load({
       "model.hint":
         "Sorted by total consumption. Click a model to filter the page to it.",
       "model.focused":
-        "Filtered to {model}: every figure below covers only it.",
-      "model.focusedSessions":
-        "Filtered to {model}: only sessions that used it are listed.",
+        "Filtered to {model}: the figures below cover only it, and the session list shows only sessions that used it.",
       "model.clear": "Show all",
       "model.empty": "No records in this range.",
       "model.unknown": "Unknown model",
@@ -880,6 +906,8 @@ window.__ModuleLoader__.load({
         post("token-stats/api/clearContext", { sessionId }),
       compactContext: (sessionId) =>
         post("token-stats/api/compactContext", { sessionId }),
+      optimizePrompt: (sessionId, text) =>
+        post("token-stats/api/optimizePrompt", { sessionId, text }),
       contextPressure: (sessionId) =>
         post("token-stats/api/contextPressure", { sessionId }),
     };
@@ -887,6 +915,13 @@ window.__ModuleLoader__.load({
     //#endregion
 
     //#region styles
+
+    // Inlined from icon-prompt-optimize.svg (which ships in the package for
+    // reference and packaging): an inline string spares the button a network
+    // fetch per render, and the paths carry no fill of their own so the
+    // icon follows the button's currentColor across both themes.
+    const OPTIMIZE_ICON =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" aria-hidden="true"><path d="M74.377555 949.628015a337.529931 337.529931 0 0 1 22.514995-99.091979l-55.222989-55.222989A419.332914 419.332914 0 0 0 0.12357 987.690007a36.449993 36.449993 0 0 0 36.384993 36.191993 418.299914 418.299914 0 0 0 192.18296-41.674991l-55.028989-55.029989a343.27193 343.27193 0 0 1-99.284979 22.450995z m547.325888-657.061865a109.671978 109.671978 0 1 0 109.671977 109.670978 109.671978 109.671978 0 0 0-109.671977-109.670978z"/><path d="M1021.489361 33.998203a33.933993 33.933993 0 0 0-31.289994-31.223994C967.815372 0.90421 944.848376 0.00021 922.010381 0.00021a865.825822 865.825822 0 0 0-701.897856 358.045927H37.088562a34.126993 34.126993 0 0 0-24.319995 58.060988l111.154978 111.284977A864.469823 864.469823 0 0 0 73.990555 684.99707l264.953945 265.146945a852.858825 852.858825 0 0 0 157.926968-50.06199l111.154977 111.155978a33.417993 33.417993 0 0 0 23.934995 10.063998 34.191993 34.191993 0 0 0 34.190993-33.998993V804.087045a865.889822 865.889822 0 0 0 357.852927-701.833856c0-23.095995-0.904-45.739991-2.515999-68.254986z m-399.979918 551.196887a182.893962 182.893962 0 1 1 183.087962-182.892963 182.957962 182.957962 0 0 1-182.893962 182.892963z"/></svg>';
 
     const CSS = `
 .dts-page{box-sizing:border-box;height:100%;overflow:auto;padding:0 24px 48px;color:var(--dsw-alias-label-primary);font-size:14px;line-height:22px}
@@ -1041,6 +1076,26 @@ window.__ModuleLoader__.load({
 .dts-ctxBtn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-brand-primary)}
 .dts-ctxClear{background:#d97706}
 .dts-ctxCompact{background:#16a34a}
+/* The optimize button sits inline in the composer toolbar row (input.left
+   slot): real flow layout, so it can never cover the draft text. Chip
+   styling matches the platform toolbar buttons — bare icon+label that
+   brightens on hover instead of a boxed button. */
+.dts-optWrap{display:inline-flex;align-items:center}
+.dts-optBtnWrap{position:relative;display:inline-flex}
+.dts-optBtn{pointer-events:auto;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border:none;border-radius:var(--dsw-radius-md);background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;line-height:16px;cursor:pointer;transition:background-color .12s,color .12s}
+.dts-optBtn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.dts-optBtn:disabled{opacity:.45;cursor:default}
+.dts-optBtn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-brand-primary)}
+.dts-optIcon{width:14px;height:14px;flex:none}
+.dts-optIcon svg{width:14px;height:14px;display:block;fill:currentColor}
+/* Native title tooltips are slow to appear; a CSS bubble keyed on the same
+   locale string is instant and follows the theme through the alias tokens.
+   It opens upward above the row, right-aligned, matching the platform's
+   own toolbar tooltip placement. */
+.dts-optTip{position:absolute;bottom:calc(100% + 6px);right:0;width:max-content;max-width:280px;white-space:normal;padding:4px 8px;border-radius:6px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);box-shadow:var(--dsw-elevation-soft);color:var(--dsw-alias-label-primary);font-size:11px;line-height:16px;text-align:left;pointer-events:none;opacity:0;transition:opacity .12s;z-index:20}
+.dts-optBtnWrap:hover .dts-optTip,.dts-optBtnWrap:focus-within .dts-optTip{opacity:1}
+/* The rewrite failure note renders beside the chip in the row, kept short. */
+.dts-optError{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d97706;font-size:11px;line-height:16px}
 @media (max-width:820px){.dts-tr{grid-template-columns:minmax(0,1.3fr) repeat(4,minmax(0,.65fr)) 34px}.dts-tdPeak{display:none}}
 .dts-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:16px;padding:10px 12px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1)}
 .dts-toolbarLabel{color:var(--dsw-alias-label-secondary);font-size:12px}
@@ -2365,6 +2420,8 @@ window.__ModuleLoader__.load({
                             ...current,
                             timeZone: next,
                           })),
+                        onPatch: (patch) =>
+                          setDraft((current) => ({ ...current, ...patch })),
                       })
                     : null,
                   section === "context"
@@ -3217,8 +3274,16 @@ window.__ModuleLoader__.load({
       );
     }
 
-    /** The general tab: the two enumerable settings. */
-    function GeneralTab({ draft, doc, editable, t, onCurrency, onZone }) {
+    /**
+     * The general tab: the two enumerable settings, then the prompt-optimizer
+     * block the composer's optimize button reads.
+     *
+     * The optimizer fields mirror the context tab's shape — one instruction
+     * textarea, two catalog pickers — because the two features share one
+     * mental model ("what the plugin sends to a model on your behalf"); only
+     * the config keys differ.
+     */
+    function GeneralTab({ draft, doc, editable, t, onCurrency, onZone, onPatch }) {
       const zone =
         typeof draft.timeZone === "string" && draft.timeZone !== ""
           ? draft.timeZone
@@ -3277,6 +3342,153 @@ window.__ModuleLoader__.load({
             onChange: onCurrency,
             t,
           }),
+        ),
+        h(OptimizerFields, { draft, doc, editable, t, onPatch }),
+      );
+    }
+
+    /**
+     * The prompt-optimizer fields: the instruction the optimizer model reads,
+     * and the route it runs on, shared by the optimize button above the input
+     * box. Structurally a copy of the context tab's prompt + route block —
+     * same catalog, same inherit-when-empty rule — keyed on optimizer*.
+     */
+    function OptimizerFields({ draft, doc, editable, t, onPatch }) {
+      const fallback = doc?.value ?? {};
+      const prompt =
+        typeof draft.optimizerPrompt === "string"
+          ? draft.optimizerPrompt
+          : (fallback.optimizerPrompt ?? "");
+      const provider =
+        typeof draft.optimizerProvider === "string"
+          ? draft.optimizerProvider
+          : (fallback.optimizerProvider ?? "");
+      const model =
+        typeof draft.optimizerModel === "string"
+          ? draft.optimizerModel
+          : (fallback.optimizerModel ?? "");
+      const groups = Array.isArray(doc?.models?.groups)
+        ? doc.models.groups
+        : [];
+      const providerOptions = useMemo(() => {
+        const rows = groups.map((group) => ({
+          value: group.id,
+          label: group.name ?? group.id,
+        }));
+        return [{ value: "", label: t("settings.placeholder.inherit") }, ...rows];
+      }, [groups, t]);
+      const modelOptions = useMemo(() => {
+        const source =
+          provider === ""
+            ? groups
+            : groups.filter((group) => group.id === provider);
+        const rows = [];
+        for (const group of source)
+          for (const item of Array.isArray(group.models) ? group.models : [])
+            rows.push({
+              value: item.id,
+              label:
+                item.contextWindow === null || item.contextWindow === undefined
+                  ? item.id
+                  : `${item.name ?? item.id} · ${formatCompact(item.contextWindow)}`,
+            });
+        return [{ value: "", label: t("settings.placeholder.inherit") }, ...rows];
+      }, [groups, provider, t]);
+      return h(
+        "div",
+        { className: "dts-section" },
+        h(
+          "div",
+          { className: "dts-field" },
+          h(
+            "div",
+            { className: "dts-fieldHead" },
+            h(
+              "span",
+              { className: "dts-fieldKey" },
+              t("settings.field.optimizerPrompt"),
+            ),
+          ),
+          h(
+            "p",
+            { className: "dts-fieldDesc" },
+            t("settings.fieldDesc.optimizerPrompt"),
+          ),
+          h("textarea", {
+            className: "dts-textarea",
+            rows: 10,
+            value: prompt,
+            disabled: !editable,
+            spellCheck: false,
+            onChange: (event) => onPatch({ optimizerPrompt: event.target.value }),
+          }),
+        ),
+        h(
+          "div",
+          { className: "dts-fieldGrid" },
+          h(
+            "div",
+            { className: "dts-field" },
+            h(
+              "div",
+              { className: "dts-fieldHead" },
+              h(
+                "span",
+                { className: "dts-fieldKey" },
+                t("settings.field.optimizerProvider"),
+              ),
+            ),
+            h(
+              "p",
+              { className: "dts-fieldDesc" },
+              t("settings.fieldDesc.optimizerProvider"),
+            ),
+            h(SearchSelect, {
+              options: providerOptions,
+              value: provider,
+              // Same routability rule as the compact pickers: a provider that
+              // does not serve the chosen model would only fail when the
+              // button runs, so switching providers clears the model first.
+              onChange: (next) => {
+                const stillServed =
+                  next === "" ||
+                  model === "" ||
+                  groups
+                    .find((group) => group.id === next)
+                    ?.models?.some((item) => item.id === model) === true;
+                onPatch(
+                  stillServed
+                    ? { optimizerProvider: next }
+                    : { optimizerProvider: next, optimizerModel: "" },
+                );
+              },
+              t,
+            }),
+          ),
+          h(
+            "div",
+            { className: "dts-field" },
+            h(
+              "div",
+              { className: "dts-fieldHead" },
+              h(
+                "span",
+                { className: "dts-fieldKey" },
+                t("settings.field.optimizerModel"),
+              ),
+            ),
+            h(
+              "p",
+              { className: "dts-fieldDesc" },
+              t("settings.fieldDesc.optimizerModel"),
+            ),
+            h(SearchSelect, {
+              options: modelOptions,
+              value: model,
+              onChange: (next) => onPatch({ optimizerModel: next }),
+              t,
+            }),
+          ),
         ),
       );
     }
@@ -5462,6 +5674,10 @@ window.__ModuleLoader__.load({
                   "div",
                   null,
                   h("h2", { className: "dts-cardTitle" }, t("model.title")),
+                  // One line per state. The focused sentence names both things
+                  // the filter actually does — the cards' numbers and the
+                  // session list — so the reader gets the full effect without
+                  // two near-identical sentences stacked up.
                   h(
                     "p",
                     { className: "dts-cardHint" },
@@ -5469,19 +5685,6 @@ window.__ModuleLoader__.load({
                       ? t("model.hint")
                       : t("model.focused").replace("{model}", focusModel),
                   ),
-                  // The picker filters the session table as well as the cards,
-                  // which is not obvious from the bars alone; naming the models
-                  // the row list was narrowed to says so.
-                  focusModel === null
-                    ? null
-                    : h(
-                        "p",
-                        { className: "dts-cardHint" },
-                        t("model.focusedSessions").replace(
-                          "{model}",
-                          focusModel,
-                        ),
-                      ),
                 ),
                 focusModel === null
                   ? null
@@ -5732,6 +5935,84 @@ window.__ModuleLoader__.load({
       );
     }
 
+    /**
+     * The optimize button, inlined in the composer toolbar row.
+     *
+     * The draft is read straight off the session input shell — the same
+     * published store the composer itself renders from — and the rewrite is
+     * written back through `actions.setDraft`, the same face the platform's
+     * own editing commands use, so persistence and the editor's internal
+     * state stay consistent with no DOM poking. Attachments are left alone
+     * on purpose: only the prompt text travels, and only the prompt text is
+     * replaced.
+     *
+     * The shell arrives through the slot's inject, resolved the same way the
+     * queue dock resolves its conversation service; the overlay slot passes
+     * no props of its own, so nothing here relies on hook injection.
+     */
+    function OptimizeButton({ sessionId, input, t: translate }) {
+      const t = translate ?? boundT;
+      // The published InputState store: subscribe for re-renders, snapshot
+      // for the value. A shell that has not published yet degrades to a
+      // hidden button rather than a broken composer.
+      const snapshot = useSyncExternalStore(
+        input === undefined ? subscribeNoop : input.state.subscribe.bind(input.state),
+        input === undefined ? snapshotNoop : input.state.getSnapshot.bind(input.state),
+      );
+      const draft = typeof snapshot?.draft === "string" ? snapshot.draft : "";
+      const [busy, setBusy] = useState(false);
+      const [error, setError] = useState(null);
+      if (typeof sessionId !== "string" || sessionId === "") return null;
+      // No shell, no button: writing the rewrite back would be impossible.
+      // The button itself stays resident — the user asked for a permanent
+      // affordance — and is merely disabled while the draft is empty, which
+      // keeps the hover explanation discoverable at all times.
+      if (input === undefined) return null;
+
+      const run = async () => {
+        if (busy || draft.trim() === "") return;
+        setBusy(true);
+        setError(null);
+        try {
+          const result = await api.optimizePrompt(sessionId, draft);
+          const text = typeof result?.text === "string" ? result.text : "";
+          if (text !== "") input.actions.setDraft(text);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err));
+        } finally {
+          setBusy(false);
+        }
+      };
+
+      return h(
+        "div",
+        { className: "dts-optWrap", "data-dsh-plugin": PANEL_ID },
+        h(
+          "div",
+          { className: "dts-optBtnWrap" },
+          h(
+            "button",
+            {
+              type: "button",
+              className: "dts-optBtn",
+              disabled: busy || draft.trim() === "",
+              onClick: run,
+            },
+            h("span", { className: "dts-optIcon", dangerouslySetInnerHTML: { __html: OPTIMIZE_ICON } }),
+            busy ? t("optimize.working") : t("optimize.button"),
+          ),
+          h(
+            "span",
+            { className: "dts-optTip", role: "tooltip" },
+            t("optimize.hint"),
+          ),
+        ),
+        error === null
+          ? null
+          : h("span", { className: "dts-optError" }, error),
+      );
+    }
+
     //#endregion
 
     return {
@@ -5810,6 +6091,53 @@ window.__ModuleLoader__.load({
               ),
             ),
           "dsh-token-ledger: context actions",
+        );
+        // The optimize button lives in the composer's toolbar row — the same
+        // row as the attach button and the mode chips — via the
+        // conversation.input.left slot. A floating overlay above the draft
+        // was tried first and rejected: long text wrapped under it and the
+        // chip covered what the user was typing. The toolbar row is real
+        // flow layout, so it can never cover the draft, and the slot passes
+        // no props of its own, so the inject resolves the session's input
+        // shell through the conversation service, exactly the way the queue
+        // dock reaches conversation.input: the button reads the published
+        // draft store and writes the rewrite back through actions.setDraft
+        // like any platform editing command would.
+        ctx.effect(
+          () =>
+            ctx.slots.inject("conversation.input.left", () =>
+              ctx.slots.register(
+                {
+                  name: "conversation.input.left",
+                  id: "dsh-token-ledger.optimize-prompt",
+                  order: 50,
+                  locale: NS,
+                  inject: (sessionId) => {
+                    const sessions = ctx.get("sessions");
+                    if (sessions === undefined)
+                      return { sessionId, input: undefined };
+                    try {
+                      const actx = sessions.scope(sessionId);
+                      // The conversation service lives on the session scope,
+                      // and its input face resolves only for a retained
+                      // binding; a session being torn down simply renders
+                      // without the button.
+                      const conversation = actx?.get("conversation");
+                      if (conversation === undefined)
+                        return { sessionId, input: undefined };
+                      return {
+                        sessionId,
+                        input: conversation.input.for(actx),
+                      };
+                    } catch {
+                      return { sessionId, input: undefined };
+                    }
+                  },
+                },
+                OptimizeButton,
+              ),
+            ),
+          "dsh-token-ledger: optimize prompt button",
         );
       },
     };

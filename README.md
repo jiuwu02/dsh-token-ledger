@@ -32,10 +32,14 @@ third-party dependency is required.
   sessions that actually changed.
 - **Holiday auto-update** — any year is fetched at runtime and cached, so a new year needs no new build.
 - **Context actions** — Clear (orange) and Compact (green) buttons in the dock under the composer, plus the
-  `/clear-context` and `/compact-context` commands. Compact runs mid-conversation: it fixes a cut before
-  summarizing, so every step taken while the summarizer works stays verbatim behind the summary, and the
-  checkpoint reuses the platform's own "context compacted" marker with the item and token counts. Clear
-  replaces the whole surface and therefore requires an idle session.
+  `/clear-context`, `/compact-context` and `/compact` commands. Compact runs mid-conversation: it fixes a
+  cut before summarizing, so every step taken while the summarizer works stays verbatim behind the summary,
+  and the checkpoint reuses the platform's own "context compacted" marker with the item and token counts. A
+  `/compact` run folds the command row and the marker into one merged card, like the platform's own
+  compaction. Clear replaces the whole surface and therefore requires an idle session.
+- **Prompt optimization** — an Optimize button resident in the input box toolbar sends the draft to
+  a configurable optimizer model and pastes the rewrite back into the composer; attachments are untouched.
+  The instruction and route are configured on the **General** settings tab.
 - **Bilingual** — Chinese and English follow the platform locale.
 
 ## Requirements
@@ -69,7 +73,7 @@ To remove it, uninstall the `dsh-token-ledger` bundle from the Plugins page.
    use `Export sessions CSV` to save what the table currently shows.
 6. Page through large histories with `Previous` / `Next`; each page holds 40 session groups.
 7. Use **Refresh** to re-scan, or **Export** to save the daily buckets as CSV / JSON.
-8. Use **Billing settings** to open the settings window and change the zone, currency, peak windows, holidays,
+8. Use **General settings** to open the settings window and change the zone, currency, peak windows, holidays,
    and price sheet; saving re-prices immediately.
 
 The panel refreshes automatically when it opens; large histories load in about a second because only changed
@@ -77,7 +81,7 @@ sessions are decoded after the first pass.
 
 ## Billing configuration
 
-Every billing parameter is a plugin config entry. **Open the settings window from the `Billing settings` button
+Every billing parameter is a plugin config entry. **Open the settings window from the `General settings` button
 in the panel header** to edit them online; saving re-prices immediately, with no DSH restart.
 
 The window edits the config **by structure**, not by field name: model prices are a table, peak

@@ -38,6 +38,7 @@
     "locale/en.json",
     "locale/zh.json",
     "icon.svg",
+    "icon-prompt-optimize.svg",
     "README.md",
     "README.zh-CN.md"
   ],
