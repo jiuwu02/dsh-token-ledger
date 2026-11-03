@@ -17,19 +17,26 @@
  * file only wires them to the plugin lifecycle.
  */
 
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
 import { count } from "./lib/time.js";
 import { Config, CONFIG_FIELDS, PEAK_MODES } from "./lib/schema.js";
 import { billingRules, migrateCalendars } from "./lib/billing.js";
 import { HolidayStore } from "./lib/holidays.js";
-import { UsageIndex } from "./lib/store.js";
+import { UsageIndex, storageDirOf } from "./lib/store.js";
 import { readBody, writeJson } from "./lib/http.js";
 import { translatorFor } from "./lib/i18n.js";
+import { toolUsageSummary } from "./lib/ledger.js";
+import { applyPricePreset, pricePresetCatalog } from "./lib/prices.js";
 import {
   agentForSession,
   clearContext,
   compactContext,
+  inspectEntryState,
   measureContext,
   optimizePrompt,
+  taskLocksFor,
 } from "./lib/contextops.js";
 export const name = "dsh-token-panorama";
 // `commands` joins the list because the two context commands are registered at
@@ -143,6 +150,54 @@ export function apply(ctx, config) {
   };
   const fence = (req) =>
     ctx.connection.requestRejection({ headers: req.headers }) === undefined;
+
+  /**
+   * The config backup ring: the last few values this row held.
+   *
+   * The schema only proves a value is legal — a legal price in the wrong row
+   * still silently mis-prices everything — so every save writes the value it
+   * is about to replace into this ring first, and the settings window can put
+   * one back. The ring lives in this plugin's storage directory because the
+   * config document itself belongs to the platform; five entries is enough to
+   * undo a run of bad edits without becoming a second config store.
+   */
+  const BACKUP_LIMIT = 5;
+  const backupPath = () => join(storageDirOf(ctx), "config-backups.json");
+
+  /** Read the ring, oldest last; an unreadable ring reads as empty. */
+  const readBackups = async () => {
+    try {
+      const parsed = JSON.parse(await readFile(backupPath(), "utf8"));
+      return Array.isArray(parsed) ? parsed.slice(0, BACKUP_LIMIT) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  /** Persist the ring atomically; a failure must not fail the save it guards. */
+  const writeBackups = async (list) => {
+    try {
+      const path = backupPath();
+      await mkdir(join(path, ".."), { recursive: true });
+      const staged = `${path}.tmp`;
+      await writeFile(staged, `${JSON.stringify(list)}\n`, "utf8");
+      await rename(staged, path);
+    } catch (error) {
+      ctx.logger?.warn?.(
+        `dsh-token-panorama: could not write config backups: ${String(error)}`,
+      );
+    }
+  };
+
+  /**
+   * Push one config value onto the ring.
+   * @param value - the value being replaced.
+   */
+  const pushBackup = async (value) => {
+    const list = await readBackups();
+    list.unshift({ at: Date.now(), value });
+    await writeBackups(list.slice(0, BACKUP_LIMIT));
+  };
 
   /**
    * The Loader entry that owns this plugin's config row.
@@ -515,6 +570,14 @@ export function apply(ctx, config) {
         optimizerProvider: config?.optimizerProvider ?? "",
         optimizerModel: config?.optimizerModel ?? "",
         optimizerUseContext: config?.optimizerUseContext === true,
+        // The budget block is compared against the panorama's own sums in the
+        // Client, so it travels with the config it was written with.
+        budget: {
+          dailyTokens: config?.budget?.dailyTokens ?? 0,
+          weeklyTokens: config?.budget?.weeklyTokens ?? 0,
+          dailyCost: config?.budget?.dailyCost ?? 0,
+          weeklyCost: config?.budget?.weeklyCost ?? 0,
+        },
       },
       override,
       editable: editor !== undefined && entry !== undefined,
@@ -557,6 +620,10 @@ export function apply(ctx, config) {
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : String(error));
     }
+    // The value being replaced goes into the backup ring before anything is
+    // written: a save is the moment a good config becomes a bad one, and this
+    // is the only point where the old value is still around.
+    await pushBackup(readConfig().override);
     await editor.edit(entry, () => resolved);
     return { resolved };
   };
@@ -686,6 +753,67 @@ export function apply(ctx, config) {
     };
   };
 
+  /**
+   * Attach the per-call blocks and the staleness flag to one snapshot.
+   * @param doc - the wire document from the index.
+   * @param stale - whether a revalidation is already running behind it.
+   * @returns the response body value.
+   */
+  const decorate = async (doc, stale) => {
+    // The tool self-consumption ledger is the second source the panorama
+    // merges: it travels beside the session totals and is labelled as its own
+    // line rather than folded into them, so a card can sum both and say so.
+    doc.toolUsage = await toolUsageSummary(ctx, rules);
+    doc.budget = {
+      dailyTokens: config?.budget?.dailyTokens ?? 0,
+      weeklyTokens: config?.budget?.weeklyTokens ?? 0,
+      dailyCost: config?.budget?.dailyCost ?? 0,
+      weeklyCost: config?.budget?.weeklyCost ?? 0,
+    };
+    doc.stale = stale;
+    return doc;
+  };
+
+  /** Re-scan in the background; logs and swallows every failure. */
+  const revalidate = async () => {
+    try {
+      await index.scan(false);
+      await ensureHolidays();
+    } catch (error) {
+      ctx.logger?.warn?.(
+        `dsh-token-panorama: background revalidation failed: ${String(error)}`,
+      );
+    }
+  };
+
+  /**
+   * The summary response, served stale-while-revalidate.
+   *
+   * Opening the panorama used to await a full pass every single time, which
+   * is the seconds the user waited once the roster grew. Now a completed pass
+   * answers instantly for the debounce window, and past that window the cached
+   * aggregate answers while the pass runs behind it — the Client repaints when
+   * the revalidation lands. Only a boot (or an explicit cache clear) has
+   * nothing to serve and pays for the pass inline.
+   * @param body - the request body; `refresh` forces a pass first.
+   * @returns the response value.
+   */
+  const summaryValue = async (body) => {
+    if (body.refresh === true) {
+      await index.scan(true);
+      await ensureHolidays();
+      return decorate(index.snapshot(null), false);
+    }
+    if (index.isFresh()) return decorate(index.snapshot(null), false);
+    if (index.lastScanAt === 0) {
+      await index.scan(false);
+      await ensureHolidays();
+      return decorate(index.snapshot(null), false);
+    }
+    void revalidate();
+    return decorate(index.snapshot(null), true);
+  };
+
   registerAutoCompaction();
 
   // Both commands share one shape: resolve the agent from the invocation, run
@@ -790,10 +918,7 @@ export function apply(ctx, config) {
           try {
             const body = await readBody(req);
             if (method === "summary") {
-              if (body.refresh === true) await index.scan(true);
-              else await index.ensureFresh();
-              await ensureHolidays();
-              writeJson(res, 200, { ok: true, value: index.snapshot(null) });
+              writeJson(res, 200, { ok: true, value: await summaryValue(body) });
               return;
             }
             if (method === "refresh") {
@@ -801,7 +926,7 @@ export function apply(ctx, config) {
               await ensureHolidays();
               writeJson(res, 200, {
                 ok: true,
-                value: index.snapshot(scanInfo),
+                value: await decorate(index.snapshot(scanInfo), false),
               });
               return;
             }
@@ -923,6 +1048,142 @@ export function apply(ctx, config) {
                   editable: true,
                 },
               });
+              return;
+            }
+            if (method === "status") {
+              // What the dock buttons ask before enabling an action: is this
+              // session's conversation running, and is one of this plugin's
+              // operations already holding it. Both answers come from the log
+              // and the task lock rather than from the agent, so a second
+              // window sees a task a first window is running.
+              const sessionId =
+                typeof body.sessionId === "string" ? body.sessionId : "";
+              const agent =
+                sessionId === "" ? undefined : agentForSession(ctx, sessionId);
+              let running = false;
+              if (agent !== undefined) {
+                try {
+                  const state = inspectEntryState(agent.session);
+                  running =
+                    state.openTurn !== undefined && state.openTurn !== null;
+                } catch {
+                  /* a session that cannot be inspected is not known to run */
+                }
+              }
+              const locks = await taskLocksFor(ctx).status();
+              const key = `context:${sessionId}`;
+              writeJson(res, 200, {
+                ok: true,
+                value: {
+                  sessionId,
+                  running,
+                  task: locks.some((entry) => entry.key === key),
+                  locks,
+                },
+              });
+              return;
+            }
+            if (method === "pricePresets") {
+              writeJson(res, 200, { ok: true, value: pricePresetCatalog() });
+              return;
+            }
+            if (method === "applyPresets") {
+              // Presets fill a draft the modal still owns, so the draft travels
+              // here and goes back resolved: one round trip, and every value
+              // the modal shows afterwards has already passed `Config` — a
+              // preset can never introduce a row the save would refuse.
+              const applied = [];
+              const ids =
+                Array.isArray(body.ids) && body.ids.length > 0
+                  ? body.ids
+                  : pricePresetCatalog().presets.map((preset) => preset.id);
+              for (const id of ids) {
+                const keys = applyPricePreset(body.value, id);
+                if (keys !== null) applied.push({ id, models: keys });
+              }
+              if (applied.length === 0) {
+                writeJson(res, 400, {
+                  ok: false,
+                  error: {
+                    code: "invalid",
+                    message: t("api.presetRequired"),
+                  },
+                });
+                return;
+              }
+              let resolved;
+              try {
+                resolved = Config(body.value);
+              } catch (error) {
+                writeJson(res, 400, {
+                  ok: false,
+                  error: {
+                    code: "invalid",
+                    message:
+                      error instanceof Error ? error.message : String(error),
+                  },
+                });
+                return;
+              }
+              writeJson(res, 200, {
+                ok: true,
+                value: { value: resolved, applied },
+              });
+              return;
+            }
+            if (method === "configBackups") {
+              const list = await readBackups();
+              writeJson(res, 200, {
+                ok: true,
+                value: {
+                  backups: list.map((entry, position) => ({
+                    position,
+                    at: entry.at,
+                  })),
+                },
+              });
+              return;
+            }
+            if (method === "restoreConfig") {
+              const list = await readBackups();
+              const position = Number.isInteger(body.position)
+                ? body.position
+                : 0;
+              const chosen = list[position];
+              if (chosen === undefined) {
+                writeJson(res, 404, {
+                  ok: false,
+                  error: {
+                    code: "not-found",
+                    message: t("api.backupMissing"),
+                  },
+                });
+                return;
+              }
+              // `saveConfig` snapshots the state being replaced on its own, so
+              // a restore is undoable exactly like a save: pressing restore
+              // twice puts the user back where they started instead of
+              // trapping them in the past. The restored value passes `Config`
+              // like any other write.
+              const { resolved } = await saveConfig(chosen.value);
+              writeJson(res, 200, {
+                ok: true,
+                value: {
+                  saved: resolved,
+                  fields: CONFIG_FIELDS,
+                  value: resolved,
+                  override: resolved,
+                  editable: true,
+                  restoredAt: chosen.at,
+                },
+              });
+              return;
+            }
+            if (method === "clearCache") {
+              // The settings window's escape hatch: drop every cached fold so
+              // the next panel open re-reads the corpus from zero.
+              await index.clear();
+              writeJson(res, 200, { ok: true, value: { cleared: true } });
               return;
             }
             writeJson(res, 404, {

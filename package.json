@@ -13,6 +13,9 @@
     "billing"
   ],
   "license": "MIT",
+  "scripts": {
+    "test": "node test/i18n.test.mjs && node test/smoke.test.mjs"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jiuwu02/dsh-token-panorama.git"

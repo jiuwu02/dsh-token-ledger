@@ -174,7 +174,8 @@ window.__ModuleLoader__.load({
       "settings.context.system": "系统提示词",
       "settings.context.tools": "工具定义",
       "settings.context.messages": "对话消息",
-      "settings.context.usage": "计费侧最后上报的用量 {tokens}，与上方三项总和不属同一口径。",
+      "settings.context.usage":
+        "计费侧最后上报的用量 {tokens}，与上方三项总和不属同一口径。",
       "settings.context.unavailable": "无法读取当前会话的上下文占用。",
       "settings.context.noWindow": "所选模型未提供上下文上限，无法计算比例。",
       "settings.fieldDesc.compactPrompt":
@@ -225,7 +226,8 @@ window.__ModuleLoader__.load({
       "cost.unpriced": "{models} 无定价，按默认价计算",
       "stat.tokens": "tokens",
       "heat.title": "使用热力图",
-      "heat.hint": "颜色越深表示当日 token 消耗越高；此卡固定显示全部历史，不受上方时间范围影响。",
+      "heat.hint":
+        "颜色越深表示当日 token 消耗越高；此卡固定显示全部历史，不受上方时间范围影响。",
       "heat.week": "周",
       "heat.month": "月",
       "heat.less": "少",
@@ -293,6 +295,43 @@ window.__ModuleLoader__.load({
       "footer.source":
         "共 {sessions} 个会话（{main} 主会话 / {subagent} 子代理，{archived} 已归档），{calls} 次调用。",
       "footer.updated": "最后更新 {time}",
+      "summary.stale": "正在后台刷新，先显示上一次的结果。",
+      "stat.tool": "工具自耗",
+      "stat.tool.hint": "{calls} 次调用（{estimated} 次为估算）",
+      "stat.tool.mix": "压缩 {compact} · 优化 {optimize} · 清空 {clear} 次",
+      "stat.compactROI": "压缩盈亏",
+      "stat.compactROI.hint": "压缩花费 {cost}，省下 {saved} tokens",
+      "stat.compactROI.none": "尚无压缩记录",
+      "budget.title": "预算提醒",
+      "budget.dailyTokens": "今日 token {used} 已超过预算 {limit}",
+      "budget.weeklyTokens": "本周 token {used} 已超过预算 {limit}",
+      "budget.dailyCost": "今日费用 {used} 已超过预算 {limit}",
+      "budget.weeklyCost": "本周费用 {used} 已超过预算 {limit}",
+      "settings.presets.title": "价格预设",
+      "settings.presets.hint": "按官方价目填入常见模型，写入前照常校验；价格数据截至 {date}。",
+      "settings.presets.pick": "选择预设…",
+      "settings.presets.apply": "套用",
+      "settings.presets.applyAll": "套用全部",
+      "settings.presets.applied": "已套用 {count} 个模型的价格。",
+      "settings.presets.currencyWarn": "该预设以 {currency} 计价，当前配置货币是 {current}；数字按预设原币填入，请自行换算。",
+      "settings.presets.source": "来源：{source}",
+      "settings.restore": "恢复上一版",
+      "settings.restore.hint": "把上一次保存的配置写回；当前配置同样会存入快照",
+      "settings.restored": "已恢复上一版配置。",
+      "settings.clearCache": "清空解析缓存",
+      "settings.clearCache.hint": "下次打开全景时重新扫描全部会话日志",
+      "settings.cacheCleared": "缓存已清空。",
+      "settings.budget.title": "预算告警",
+      "settings.budget.hint": "0 表示关闭；达到阈值时全景页顶部出现提醒。",
+      "settings.budget.dailyTokens": "日 token 预算",
+      "settings.budget.weeklyTokens": "周 token 预算",
+      "settings.budget.dailyCost": "日费用预算",
+      "settings.budget.weeklyCost": "周费用预算",
+      "optimize.blocking": "提示词优化中…",
+      "optimize.revert": "回退",
+      "optimize.revert.hint": "恢复到这次优化前的输入",
+      "context.clear.disabledRunning": "对话流运行中，无法清空",
+      "context.disabledTask": "另一任务进行中，稍后再试",
       "error.routeUnavailable": "用量接口不可用",
       "error.routeNonJson": "用量接口返回了非 JSON 响应",
       "error.routeStatus": "用量接口请求失败（HTTP {status}）",
@@ -566,6 +605,43 @@ window.__ModuleLoader__.load({
       "footer.source":
         "{sessions} sessions in total ({main} main / {subagent} subagent, {archived} archived), {calls} calls.",
       "footer.updated": "Updated {time}",
+      "summary.stale": "Refreshing in the background; showing the last result.",
+      "stat.tool": "Tool self-consumption",
+      "stat.tool.hint": "{calls} calls ({estimated} estimated)",
+      "stat.tool.mix": "compact {compact} · optimize {optimize} · clear {clear}×",
+      "stat.compactROI": "Compaction ROI",
+      "stat.compactROI.hint": "compaction cost {cost}, saved {saved} tokens",
+      "stat.compactROI.none": "no compaction yet",
+      "budget.title": "Budget warning",
+      "budget.dailyTokens": "today's tokens {used} exceed the budget {limit}",
+      "budget.weeklyTokens": "this week's tokens {used} exceed the budget {limit}",
+      "budget.dailyCost": "today's cost {used} exceeds the budget {limit}",
+      "budget.weeklyCost": "this week's cost {used} exceeds the budget {limit}",
+      "settings.presets.title": "Price presets",
+      "settings.presets.hint": "Official list prices for common models; validated like any edit. Data as of {date}.",
+      "settings.presets.pick": "Choose a preset…",
+      "settings.presets.apply": "Apply",
+      "settings.presets.applyAll": "Apply all",
+      "settings.presets.applied": "Applied prices for {count} models.",
+      "settings.presets.currencyWarn": "This preset is priced in {currency} while the config currency is {current}; the numbers are entered as published, convert them yourself.",
+      "settings.presets.source": "source: {source}",
+      "settings.restore": "Restore previous",
+      "settings.restore.hint": "Write the previous saved config back; the current one is snapshotted too",
+      "settings.restored": "Previous configuration restored.",
+      "settings.clearCache": "Clear parse cache",
+      "settings.clearCache.hint": "The panorama re-scans every session log on next open",
+      "settings.cacheCleared": "Cache cleared.",
+      "settings.budget.title": "Budget alerts",
+      "settings.budget.hint": "0 disables an alert; the panorama header warns once the value is reached.",
+      "settings.budget.dailyTokens": "Daily token budget",
+      "settings.budget.weeklyTokens": "Weekly token budget",
+      "settings.budget.dailyCost": "Daily cost budget",
+      "settings.budget.weeklyCost": "Weekly cost budget",
+      "optimize.blocking": "Optimizing the prompt…",
+      "optimize.revert": "Revert",
+      "optimize.revert.hint": "Restore the input from before this optimization",
+      "context.clear.disabledRunning": "The conversation is running; clearing is unavailable",
+      "context.disabledTask": "Another task is running; try again shortly",
       "error.routeUnavailable": "token-stats route unavailable",
       "error.routeNonJson": "token-stats route returned a non-JSON response",
       "error.routeStatus": "token-stats route failed with {status}",
@@ -938,6 +1014,14 @@ window.__ModuleLoader__.load({
         post("token-stats/api/optimizePrompt", { sessionId, text }),
       contextPressure: (sessionId) =>
         post("token-stats/api/contextPressure", { sessionId }),
+      status: (sessionId) => post("token-stats/api/status", { sessionId }),
+      pricePresets: () => post("token-stats/api/pricePresets", {}),
+      applyPresets: (value, ids) =>
+        post("token-stats/api/applyPresets", { value, ids }),
+      configBackups: () => post("token-stats/api/configBackups", {}),
+      restoreConfig: (position) =>
+        post("token-stats/api/restoreConfig", { position }),
+      clearCache: () => post("token-stats/api/clearCache", {}),
     };
 
     //#endregion
@@ -1155,6 +1239,19 @@ window.__ModuleLoader__.load({
 .dts-statLabel{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
 .dts-statValue{margin-top:4px;font-size:22px;font-weight:600;line-height:28px;font-variant-numeric:tabular-nums}
 .dts-statHint{margin-top:2px;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:16px;font-variant-numeric:tabular-nums}
+/* Budget alerts and the stale-while-revalidate caveat warn in one amber, the
+   counterpart to the red/green the peak bands use — one colour per meaning. */
+.dts-budget{margin:16px 0 0;padding:10px 14px;border:1px solid color-mix(in srgb,var(--dsw-alias-state-warn-primary) 45%,var(--dsw-alias-border-l1));border-radius:10px;background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 10%,transparent)}
+.dts-budgetTitle{font-size:12px;font-weight:600;line-height:18px;color:var(--dsw-alias-state-warn-primary)}
+.dts-budgetLine{font-size:12px;line-height:18px;color:var(--dsw-alias-label-primary)}
+.dts-stale{color:var(--dsw-alias-state-warn-primary);font-size:11px;line-height:16px}
+.dts-fieldDesc[data-tone=warn]{color:var(--dsw-alias-state-warn-primary)}
+.dts-presetBar{display:flex;flex-direction:column;gap:6px;padding:10px 0 14px;border-bottom:.5px solid var(--dsw-alias-border-l1)}
+.dts-presetRow{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.dts-presetRow .dts-select{width:auto;min-width:220px}
+.dts-optRevert{height:24px;padding:0 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:none;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;cursor:pointer}
+.dts-optRevert:hover{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
+.dts-optRevert:disabled{opacity:.55;cursor:not-allowed}
 /* The cost card's rule line prints both bands; each half keeps the colour the
    rest of the panel gives that band. The separator stays secondary so the two
    figures do not read as one long coloured string. */
@@ -2009,7 +2106,8 @@ window.__ModuleLoader__.load({
             if (alive) setPressure(value);
           })
           .catch(() => {
-            if (alive) setPressure({ available: false, reason: "request-failed" });
+            if (alive)
+              setPressure({ available: false, reason: "request-failed" });
           });
         return () => {
           alive = false;
@@ -2364,21 +2462,33 @@ window.__ModuleLoader__.load({
                   "div",
                   { className: "dts-modalBody" },
                   section === "models"
-                    ? h(ModelTable, {
-                        rows: modelRows,
-                        models,
-                        profiles,
-                        currency,
-                        editable,
-                        t,
-                        onPatch: patchModel,
-                        onRemove: (name) => {
-                          const next = { ...models };
-                          delete next[name];
-                          setModels(next);
-                        },
-                        onAdd: (name) => patchModel(name, EMPTY_MODEL_ROW),
-                      })
+                    ? h(
+                        React.Fragment,
+                        null,
+                        h(PresetBar, {
+                          draft,
+                          currency,
+                          editable,
+                          t,
+                          onDraft: (value) => setDraft(value),
+                          onNote: (next) => setNote(next),
+                        }),
+                        h(ModelTable, {
+                          rows: modelRows,
+                          models,
+                          profiles,
+                          currency,
+                          editable,
+                          t,
+                          onPatch: patchModel,
+                          onRemove: (name) => {
+                            const next = { ...models };
+                            delete next[name];
+                            setModels(next);
+                          },
+                          onAdd: (name) => patchModel(name, EMPTY_MODEL_ROW),
+                        }),
+                      )
                     : null,
                   section === "peaks"
                     ? h(PeakEditor, {
@@ -2560,6 +2670,63 @@ window.__ModuleLoader__.load({
                 },
                 t("settings.reset"),
               ),
+              // Clear-cache and restore act on the whole configuration or
+              // the whole corpus, the same scope as import/export/reset, so
+              // they sit in the same row.
+              h(
+                "button",
+                {
+                  type: "button",
+                  className: "dts-btn",
+                  disabled: !editable || busy,
+                  title: t("settings.clearCache.hint"),
+                  onClick: () => {
+                    api
+                      .clearCache()
+                      .then(() =>
+                        setNote({
+                          tone: "ok",
+                          text: t("settings.cacheCleared"),
+                        }),
+                      )
+                      .catch((error) =>
+                        setNote({
+                          tone: "error",
+                          text: String(error.message),
+                        }),
+                      );
+                  },
+                },
+                t("settings.clearCache"),
+              ),
+              h(
+                "button",
+                {
+                  type: "button",
+                  className: "dts-btn",
+                  disabled: !editable || busy,
+                  title: t("settings.restore.hint"),
+                  onClick: () => {
+                    setBusy(true);
+                    api
+                      .restoreConfig(0)
+                      .then((result) => {
+                        setDoc(result);
+                        setDraft(result.value ?? result.override ?? {});
+                        setNote({ tone: "ok", text: t("settings.restored") });
+                        onSaved();
+                      })
+                      .catch((error) =>
+                        setNote({
+                          tone: "error",
+                          text: String(error.message),
+                        }),
+                      )
+                      .finally(() => setBusy(false));
+                  },
+                },
+                t("settings.restore"),
+              ),
               h(
                 "button",
                 { type: "button", className: "dts-btn", onClick: onClose },
@@ -2606,6 +2773,135 @@ window.__ModuleLoader__.load({
       weekdays: [1, 2, 3, 4, 5],
       offPeakRatio: 0.5,
     };
+
+    /**
+     * The price-preset bar above the model table.
+     *
+     * Every preset is a verified official price list with its currency, its
+     * data date and its source; "apply" fills the draft's rows through the
+     * Host, which validates the merged result with `Config` before the modal
+     * ever shows it — a preset can never introduce a row the save would
+     * refuse. A preset priced in another currency than the config says so
+     * instead of silently converting: the numbers stay exactly as published.
+     */
+    function PresetBar({ draft, currency, editable, t, onDraft, onNote }) {
+      const [presets, setPresets] = useState(null);
+      const [picked, setPicked] = useState("");
+      const [busy, setBusy] = useState(false);
+      useEffect(() => {
+        let alive = true;
+        api
+          .pricePresets()
+          .then((value) => {
+            if (alive) setPresets(value);
+          })
+          .catch(() => undefined);
+        return () => {
+          alive = false;
+        };
+      }, []);
+
+      /**
+       * Fill the draft from presets.
+       * @param ids - the preset ids to apply, or undefined for all.
+       */
+      const apply = (ids) => {
+        if (busy) return;
+        setBusy(true);
+        api
+          .applyPresets(draft, ids)
+          .then((result) => {
+            onDraft(result.value);
+            onNote({
+              tone: "ok",
+              text: t("settings.presets.applied").replace(
+                "{count}",
+                String(
+                  result.applied.reduce(
+                    (sum, entry) => sum + entry.models.length,
+                    0,
+                  ),
+                ),
+              ),
+            });
+          })
+          .catch((error) =>
+            onNote({ tone: "error", text: String(error.message) }),
+          )
+          .finally(() => setBusy(false));
+      };
+
+      const list = presets?.presets ?? [];
+      const chosen = list.find((preset) => preset.id === picked);
+      return h(
+        "div",
+        { className: "dts-presetBar" },
+        h(
+          "div",
+          { className: "dts-presetRow" },
+          h("span", { className: "dts-fieldKey" }, t("settings.presets.title")),
+          h(
+            "select",
+            {
+              className: "dts-select",
+              value: picked,
+              disabled: busy || !editable,
+              onChange: (event) => setPicked(event.target.value),
+            },
+            h("option", { value: "" }, t("settings.presets.pick")),
+            list.map((preset) =>
+              h(
+                "option",
+                { key: preset.id, value: preset.id },
+                `${preset.label} · ${preset.currency}`,
+              ),
+            ),
+          ),
+          h(
+            "button",
+            {
+              type: "button",
+              className: "dts-btn",
+              disabled: busy || !editable || picked === "",
+              onClick: () => apply([picked]),
+            },
+            t("settings.presets.apply"),
+          ),
+          h(
+            "button",
+            {
+              type: "button",
+              className: "dts-btn",
+              disabled: busy || !editable || list.length === 0,
+              onClick: () => apply(undefined),
+            },
+            t("settings.presets.applyAll"),
+          ),
+        ),
+        h(
+          "p",
+          { className: "dts-fieldDesc" },
+          t("settings.presets.hint").replace("{date}", presets?.asOf ?? "—"),
+        ),
+        chosen === undefined
+          ? null
+          : h(
+              "p",
+              {
+                className: "dts-fieldDesc",
+                "data-tone": chosen.currency === currency ? "" : "warn",
+              },
+              chosen.currency === currency
+                ? t("settings.presets.source").replace(
+                    "{source}",
+                    chosen.source,
+                  )
+                : t("settings.presets.currencyWarn")
+                    .replace("{currency}", chosen.currency)
+                    .replace("{current}", currency),
+            ),
+      );
+    }
 
     /**
      * The model price table.
@@ -3323,7 +3619,7 @@ window.__ModuleLoader__.load({
      * pickers — because the two features share one mental model ("what the
      * plugin sends to a model on your behalf"); only the config keys differ.
      */
-    function GeneralTab({ draft, doc, editable, t, onCurrency, onZone }) {
+    function GeneralTab({ draft, doc, editable, t, onCurrency, onZone, onPatch }) {
       const zone =
         typeof draft.timeZone === "string" && draft.timeZone !== ""
           ? draft.timeZone
@@ -3332,6 +3628,15 @@ window.__ModuleLoader__.load({
         typeof draft.currency === "string" && draft.currency !== ""
           ? draft.currency
           : (doc?.currency ?? "CNY");
+      // The four budget thresholds; zero means the alert is off. They travel
+      // with the rest of the config so Config validates them on save like
+      // every other field.
+      const budget = draft.budget ?? doc?.value?.budget ?? {
+        dailyTokens: 0,
+        weeklyTokens: 0,
+        dailyCost: 0,
+        weeklyCost: 0,
+      };
       return h(
         "div",
         { className: "dts-section" },
@@ -3383,6 +3688,43 @@ window.__ModuleLoader__.load({
             t,
           }),
         ),
+        h(
+          "div",
+          { className: "dts-group" },
+          h("div", { className: "dts-groupTitle" }, t("settings.budget.title")),
+          h("p", { className: "dts-fieldDesc" }, t("settings.budget.hint")),
+          ["dailyTokens", "weeklyTokens", "dailyCost", "weeklyCost"].map(
+            (key) =>
+              h(
+                "div",
+                { className: "dts-field", key },
+                h(
+                  "div",
+                  { className: "dts-fieldHead" },
+                  h(
+                    "span",
+                    { className: "dts-fieldKey" },
+                    t(`settings.budget.${key}`),
+                  ),
+                ),
+                h("input", {
+                  className: "dts-input",
+                  type: "number",
+                  min: "0",
+                  step: "any",
+                  disabled: !editable,
+                  value: String(budget[key] ?? 0),
+                  onChange: (event) =>
+                    onPatch({
+                      budget: {
+                        ...budget,
+                        [key]: Math.max(0, Number(event.target.value) || 0),
+                      },
+                    }),
+                }),
+              ),
+          ),
+        ),
       );
     }
 
@@ -3420,7 +3762,10 @@ window.__ModuleLoader__.load({
           value: group.id,
           label: group.name ?? group.id,
         }));
-        return [{ value: "", label: t("settings.placeholder.inherit") }, ...rows];
+        return [
+          { value: "", label: t("settings.placeholder.inherit") },
+          ...rows,
+        ];
       }, [groups, t]);
       const modelOptions = useMemo(() => {
         const source =
@@ -3437,7 +3782,10 @@ window.__ModuleLoader__.load({
                   ? item.id
                   : `${item.name ?? item.id} · ${formatCompact(item.contextWindow)}`,
             });
-        return [{ value: "", label: t("settings.placeholder.inherit") }, ...rows];
+        return [
+          { value: "", label: t("settings.placeholder.inherit") },
+          ...rows,
+        ];
       }, [groups, provider, t]);
 
       return h(
@@ -3466,7 +3814,8 @@ window.__ModuleLoader__.load({
             value: prompt,
             disabled: !editable,
             spellCheck: false,
-            onChange: (event) => onPatch({ optimizerPrompt: event.target.value }),
+            onChange: (event) =>
+              onPatch({ optimizerPrompt: event.target.value }),
           }),
         ),
         h(
@@ -3620,7 +3969,10 @@ window.__ModuleLoader__.load({
           value: group.id,
           label: group.name ?? group.id,
         }));
-        return [{ value: "", label: t("settings.placeholder.inherit") }, ...rows];
+        return [
+          { value: "", label: t("settings.placeholder.inherit") },
+          ...rows,
+        ];
       }, [groups, t]);
       const modelOptions = useMemo(() => {
         const source =
@@ -3639,7 +3991,10 @@ window.__ModuleLoader__.load({
                   ? item.id
                   : `${item.name ?? item.id} · ${formatCompact(item.contextWindow)}`,
             });
-        return [{ value: "", label: t("settings.placeholder.inherit") }, ...rows];
+        return [
+          { value: "", label: t("settings.placeholder.inherit") },
+          ...rows,
+        ];
       }, [groups, provider, t]);
 
       const percent = Math.round(threshold * 100);
@@ -3647,7 +4002,8 @@ window.__ModuleLoader__.load({
         pressure?.available === true && typeof pressure.ratio === "number"
           ? pressure.ratio
           : null;
-      const breakdown = pressure?.available === true ? pressure.breakdown : null;
+      const breakdown =
+        pressure?.available === true ? pressure.breakdown : null;
       // The bar stops at a full track, but the label does not: a session over
       // the window reads "230%", not a reassuring "100%".
       const percentUsed = ratio === null ? null : Math.round(ratio * 100);
@@ -3696,11 +4052,7 @@ window.__ModuleLoader__.load({
             ),
             ratio === null
               ? null
-              : h(
-                  "span",
-                  { className: "dts-fieldValue" },
-                  `${percentUsed}%`,
-                ),
+              : h("span", { className: "dts-fieldValue" }, `${percentUsed}%`),
           ),
           pressure?.available !== true
             ? h(
@@ -3728,7 +4080,7 @@ window.__ModuleLoader__.load({
                 // magnitude lower on a long cached session. Showing it beside
                 // the real one explains the difference instead of hiding it.
                 typeof pressure.usageTokens === "number" &&
-                pressure.usageTokens > 0
+                  pressure.usageTokens > 0
                   ? h(
                       "p",
                       { className: "dts-fieldDesc" },
@@ -3878,7 +4230,9 @@ window.__ModuleLoader__.load({
               value: percent,
               disabled: !editable || !autoCompact,
               onChange: (event) =>
-                onPatch({ autoCompactThreshold: Number(event.target.value) / 100 }),
+                onPatch({
+                  autoCompactThreshold: Number(event.target.value) / 100,
+                }),
             }),
             h(
               "span",
@@ -4668,7 +5022,8 @@ window.__ModuleLoader__.load({
      * @returns the tooltip title.
      */
     function trendTitle(key, grain) {
-      if (grain === "hour") return `${key.slice(0, 10)} ${key.slice(11, 13)}:00`;
+      if (grain === "hour")
+        return `${key.slice(0, 10)} ${key.slice(11, 13)}:00`;
       return key;
     }
 
@@ -4754,7 +5109,9 @@ window.__ModuleLoader__.load({
                 (row, index) =>
                   `${index === 0 ? "M" : "L"}${xAt(index).toFixed(2)},${yAt(row[5]).toFixed(2)}`,
               )
-              .join(" ")} L${xAt(rows.length - 1).toFixed(2)},${pad.top + plotHeight} L${xAt(0).toFixed(2)},${pad.top + plotHeight} Z`;
+              .join(
+                " ",
+              )} L${xAt(rows.length - 1).toFixed(2)},${pad.top + plotHeight} L${xAt(0).toFixed(2)},${pad.top + plotHeight} Z`;
 
       const ticks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => ({
         value: yPeak * ratio,
@@ -4802,7 +5159,8 @@ window.__ModuleLoader__.load({
       // measures its own width and nudges left by the overflow. Clamping to a
       // guessed width at this point would move a wide card in before it needed
       // to, which is exactly the bug the fixed-width card used to hide.
-      const tipLeft = active === null ? 0 : Math.max(xAt(hover) - TIP_WIDTH / 2, 0);
+      const tipLeft =
+        active === null ? 0 : Math.max(xAt(hover) - TIP_WIDTH / 2, 0);
 
       return h(
         "div",
@@ -5009,13 +5367,28 @@ window.__ModuleLoader__.load({
       const [focusModel, setFocusModel] = useState(null);
       const menuRef = useRef(null);
 
+      /**
+       * How many background re-fetches one open may chain.
+       *
+       * The summary can answer from a cached aggregate while the Host re-scans
+       * behind it (`stale`), so the panel asks again until a fresh document
+       * lands. The cap keeps a Host that never reports fresh from polling
+       * forever.
+       */
+      const staleRetries = useRef(0);
       const load = useCallback(async (refresh) => {
         setBusy(true);
         try {
-          setDoc(
-            refresh === true ? await api.refresh() : await api.summary(false),
-          );
+          const next =
+            refresh === true ? await api.refresh() : await api.summary(false);
+          setDoc(next);
           setError(null);
+          if (next?.stale === true && staleRetries.current < 12) {
+            staleRetries.current += 1;
+            window.setTimeout(() => void load(false), 1500);
+          } else {
+            staleRetries.current = 0;
+          }
         } catch (failure) {
           setError(
             failure instanceof Error ? failure.message : String(failure),
@@ -5127,8 +5500,7 @@ window.__ModuleLoader__.load({
               )?.[1] ?? []);
         if (base.length === 0) return [];
         const low = focusModel === null ? bounds.from : base[0][0];
-        const high =
-          focusModel === null ? bounds.to : base[base.length - 1][0];
+        const high = focusModel === null ? bounds.to : base[base.length - 1][0];
         if (low === "" || high === "") return [];
         return densify(base, low, high);
       }, [allRows, doc, focusModel, bounds]);
@@ -5255,7 +5627,10 @@ window.__ModuleLoader__.load({
               const key = slot[0];
               if (from !== "" && key.slice(0, 10) < from) continue;
               if (to !== "" && key.slice(0, 10) > to) continue;
-              if (hourSpan !== null && (key < hourSpan.from || key > hourSpan.to))
+              if (
+                hourSpan !== null &&
+                (key < hourSpan.from || key > hourSpan.to)
+              )
                 continue;
               if (focusModel !== null && slot[1] !== focusModel) continue;
               total += count(slot[6]);
@@ -5533,7 +5908,11 @@ window.__ModuleLoader__.load({
         // last preset lit over a range it no longer describes.
         h(
           "div",
-          { className: "dts-presets", role: "group", "aria-label": t("range.label") },
+          {
+            className: "dts-presets",
+            role: "group",
+            "aria-label": t("range.label"),
+          },
           PRESETS.map((entry) =>
             h(
               "button",
@@ -5555,6 +5934,71 @@ window.__ModuleLoader__.load({
         // every card below shares.
         h("span", { className: "dts-rangeHint" }, t("range.hint")),
       );
+
+      // The tool self-consumption ledger beside the session totals: the
+      // compaction, optimization and clear calls this plugin makes never touch
+      // a session log, so they arrive through their own summary block and are
+      // shown as their own line rather than folded into the session numbers.
+      const toolUsage = doc?.toolUsage ?? {
+        calls: 0,
+        estimatedCalls: 0,
+        cost: 0,
+        compaction: { ops: 0, cost: 0, savedTokens: 0, savingsRatio: null },
+        optimizer: { cost: 0, tokens: 0, calls: 0 },
+        clear: { ops: 0 },
+      };
+      // Budget alerts: the four thresholds compare against today's and this
+      // week's rows of the unfiltered day table, in the same time zone the
+      // billing uses — "current usage" must mean the clock's current period,
+      // not whatever range the cards below are narrowed to.
+      const budget = doc?.budget ?? {};
+      const budgetLines = [];
+      if (doc !== null) {
+        const zone = doc.billing?.timeZone ?? "Asia/Shanghai";
+        const today = new Intl.DateTimeFormat("en-CA", {
+          timeZone: zone,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date());
+        const [year, month, day] = today.split("-").map(Number);
+        const asUtc = Date.UTC(year, month - 1, day);
+        const backToMonday = (new Date(asUtc).getUTCDay() + 6) % 7;
+        const weekStart = new Date(asUtc - backToMonday * 86_400_000)
+          .toISOString()
+          .slice(0, 10);
+        let dayTokens = 0;
+        let dayCost = 0;
+        let weekTokens = 0;
+        let weekCost = 0;
+        for (const row of doc.days ?? []) {
+          if (row[0] < weekStart) continue;
+          weekTokens += row[5];
+          weekCost += row[7];
+          if (row[0] === today) {
+            dayTokens += row[5];
+            dayCost += row[7];
+          }
+        }
+        const push = (key, used, limit, formatter) => {
+          if (limit > 0 && used > limit)
+            budgetLines.push(
+              t(`budget.${key}`)
+                .replace("{used}", formatter(used))
+                .replace("{limit}", formatter(limit)),
+            );
+        };
+        push("dailyTokens", dayTokens, budget.dailyTokens ?? 0, formatCompact);
+        push(
+          "weeklyTokens",
+          weekTokens,
+          budget.weeklyTokens ?? 0,
+          formatCompact,
+        );
+        const asCost = (value) => cost(value, doc.billing?.currency ?? "CNY");
+        push("dailyCost", dayCost, budget.dailyCost ?? 0, asCost);
+        push("weeklyCost", weekCost, budget.weeklyCost ?? 0, asCost);
+      }
 
       const stats = h(
         "div",
@@ -5647,6 +6091,49 @@ window.__ModuleLoader__.load({
           ),
         }),
         h(Stat, { label: t("stat.calls"), value: formatInt(totals[5]) }),
+        // The two tool-ledger cards (A2): how much the plugin's own model
+        // calls cost, and whether a compaction paid for itself in context
+        // freed. The estimated marker is honest when the adapter did not
+        // report usage and the numbers came from a character estimate.
+        h(Stat, {
+          label: t("stat.tool"),
+          value: cost(toolUsage.cost, billing.currency),
+          hint: [
+            t("stat.tool.hint")
+              .replace("{calls}", formatInt(toolUsage.calls))
+              .replace("{estimated}", formatInt(toolUsage.estimatedCalls)),
+            t("stat.tool.mix")
+              .replace(
+                "{compact}",
+                cost(toolUsage.compaction.cost, billing.currency),
+              )
+              .replace(
+                "{optimize}",
+                cost(toolUsage.optimizer.cost, billing.currency),
+              )
+              .replace("{clear}", formatInt(toolUsage.clear.ops)),
+          ].join(" · "),
+        }),
+        h(Stat, {
+          label: t("stat.compactROI"),
+          value:
+            toolUsage.compaction.ops === 0 ||
+            toolUsage.compaction.savingsRatio === null
+              ? "—"
+              : `×${toolUsage.compaction.savingsRatio.toFixed(1)}`,
+          hint:
+            toolUsage.compaction.ops === 0
+              ? t("stat.compactROI.none")
+              : t("stat.compactROI.hint")
+                  .replace(
+                    "{cost}",
+                    cost(toolUsage.compaction.cost, billing.currency),
+                  )
+                  .replace(
+                    "{saved}",
+                    formatCompact(toolUsage.compaction.savedTokens),
+                  ),
+        }),
         h(Stat, {
           label: t("stat.sessions"),
           value: formatInt(doc?.sessions?.total ?? 0),
@@ -5717,10 +6204,9 @@ window.__ModuleLoader__.load({
             // a day-styled series over a 24-hour window is a single point, and
             // offering it would let the user flatten the card into something
             // that says nothing.
-            options: (hourSpan === null
-              ? GRAINS
-              : ["hour", ...GRAINS]
-            ).map((id) => ({ id, label: t(`trend.${id}`) })),
+            options: (hourSpan === null ? GRAINS : ["hour", ...GRAINS]).map(
+              (id) => ({ id, label: t(`trend.${id}`) }),
+            ),
             value: grain,
             onChange: setGrain,
           }),
@@ -5841,6 +6327,12 @@ window.__ModuleLoader__.load({
                   formatMoment(doc.generatedAt),
                 ),
               ),
+              // A stale-while-revalidate answer is a promise of fresher data,
+              // and the footer is where the freshness of these numbers is
+              // already stated — so the caveat belongs next to it.
+              doc.stale === true
+                ? h("div", { className: "dts-stale" }, t("summary.stale"))
+                : null,
             );
 
       const notice =
@@ -5876,6 +6368,20 @@ window.__ModuleLoader__.load({
               React.Fragment,
               null,
               toolbar,
+              budgetLines.length === 0
+                ? null
+                : h(
+                    "div",
+                    { className: "dts-budget", role: "alert" },
+                    h(
+                      "div",
+                      { className: "dts-budgetTitle" },
+                      t("budget.title"),
+                    ),
+                    ...budgetLines.map((line) =>
+                      h("div", { key: line, className: "dts-budgetLine" }, line),
+                    ),
+                  ),
               // The model card sits directly under the range card because its
               // models are the filter for everything below it.
               modelCard,
@@ -5946,9 +6452,37 @@ window.__ModuleLoader__.load({
      */
     function ContextActions({ sessionId, t: translate }) {
       const [busy, setBusy] = useState(null);
+      // Whether the session's conversation is mid-turn, and whether one of
+      // this plugin's tasks already holds the session. Clearing replaces the
+      // whole surface, so it must not run under a step that is still
+      // appending to it — the button greys out instead of failing after the
+      // press. Polled at a modest cadence: the status route is a backward log
+      // scan plus a lock-file read, and the dock outlives any single turn.
+      const [running, setRunning] = useState(false);
+      const [locked, setLocked] = useState(false);
       // The slot injects `t` through its locale namespace; the captured bind
       // is only a fallback for a render path that does not carry it.
       const t = translate ?? boundT;
+
+      useEffect(() => {
+        if (typeof sessionId !== "string" || sessionId === "") return undefined;
+        let alive = true;
+        const tick = () =>
+          api
+            .status(sessionId)
+            .then((value) => {
+              if (!alive) return;
+              setRunning(value?.running === true);
+              setLocked(value?.task === true);
+            })
+            .catch(() => undefined);
+        tick();
+        const timer = window.setInterval(tick, 2000);
+        return () => {
+          alive = false;
+          window.clearInterval(timer);
+        };
+      }, [sessionId]);
 
       /**
        * Fire one operation and let the session log carry the report.
@@ -5986,9 +6520,13 @@ window.__ModuleLoader__.load({
             {
               type: "button",
               className: "dts-ctxBtn dts-ctxClear",
-              disabled: busy !== null,
+              disabled: busy !== null || running || locked,
               onClick: () => run("clear"),
-              title: t("context.clear.hint"),
+              title: running
+                ? t("context.clear.disabledRunning")
+                : locked
+                  ? t("context.disabledTask")
+                  : t("context.clear.hint"),
             },
             busy === "clear" ? "…" : t("context.clear"),
           ),
@@ -5997,9 +6535,11 @@ window.__ModuleLoader__.load({
             {
               type: "button",
               className: "dts-ctxBtn dts-ctxCompact",
-              disabled: busy !== null,
+              disabled: busy !== null || locked,
               onClick: () => run("compact"),
-              title: t("context.compact.hint"),
+              title: locked
+                ? t("context.disabledTask")
+                : t("context.compact.hint"),
             },
             busy === "compact" ? "…" : t("context.compact"),
           ),
@@ -6022,18 +6562,46 @@ window.__ModuleLoader__.load({
      * queue dock resolves its conversation service; the overlay slot passes
      * no props of its own, so nothing here relies on hook injection.
      */
-    function OptimizeButton({ sessionId, input, t: translate }) {
+    function OptimizeButton({ sessionId, input, blocks, t: translate }) {
       const t = translate ?? boundT;
       // The published InputState store: subscribe for re-renders, snapshot
       // for the value. A shell that has not published yet degrades to a
       // hidden button rather than a broken composer.
       const snapshot = useSyncExternalStore(
-        input === undefined ? subscribeNoop : input.state.subscribe.bind(input.state),
-        input === undefined ? snapshotNoop : input.state.getSnapshot.bind(input.state),
+        input === undefined
+          ? subscribeNoop
+          : input.state.subscribe.bind(input.state),
+        input === undefined
+          ? snapshotNoop
+          : input.state.getSnapshot.bind(input.state),
       );
       const draft = typeof snapshot?.draft === "string" ? snapshot.draft : "";
       const [busy, setBusy] = useState(false);
       const [error, setError] = useState(null);
+      // The texts the optimizer replaced, newest last: the revert button pops
+      // one and writes it back, so a chain of optimizations unwinds one step at
+      // a time. In state because the button's visibility follows the length,
+      // and a ref would not re-render. Programmatic `setDraft` merges into the
+      // editor history instead of pushing an undo step, which is exactly why
+      // Ctrl+Z cannot recover the original and this button must.
+      const [revertStack, setRevertStack] = useState([]);
+      // Mirrors `busy` for the unmount cleanup without re-registering it.
+      const runningRef = useRef(false);
+      useEffect(
+        () => () => {
+          // An optimization still in flight must not leave the composer
+          // blocked after this button unmounts; the rewrite still lands
+          // through the input store.
+          if (runningRef.current) {
+            try {
+              blocks?.set(sessionId, undefined);
+            } catch {
+              /* the session scope may already be gone */
+            }
+          }
+        },
+        [sessionId, blocks],
+      );
       if (typeof sessionId !== "string" || sessionId === "") return null;
       // No shell, no button: writing the rewrite back would be impossible.
       // The button itself stays resident — the user asked for a permanent
@@ -6043,17 +6611,48 @@ window.__ModuleLoader__.load({
 
       const run = async () => {
         if (busy || draft.trim() === "") return;
+        const original = draft;
         setBusy(true);
+        runningRef.current = true;
         setError(null);
+        // The composer goes inert for the duration: Enter and the send button
+        // must not fire a message while the rewrite is in flight — a submit
+        // would send the un-rewritten text, and a keystroke would be silently
+        // overwritten when the rewrite lands. `blocks` is the platform's own
+        // registry for exactly this ("the one way another plugin stops a
+        // session's input"), and it renders the composer bar inert until the
+        // block is lifted.
         try {
-          const result = await api.optimizePrompt(sessionId, draft);
+          blocks?.set(sessionId, { reason: t("optimize.blocking") });
+        } catch {
+          /* an uncooperative scope must not fail the optimization itself */
+        }
+        try {
+          const result = await api.optimizePrompt(sessionId, original);
           const text = typeof result?.text === "string" ? result.text : "";
-          if (text !== "") input.actions.setDraft(text);
+          if (text !== "") {
+            setRevertStack((stack) => [...stack, original]);
+            input.actions.setDraft(text);
+          }
         } catch (err) {
           setError(err instanceof Error ? err.message : String(err));
         } finally {
+          runningRef.current = false;
+          try {
+            blocks?.set(sessionId, undefined);
+          } catch {
+            /* the scope may be gone; the unmount path covers the rest */
+          }
           setBusy(false);
         }
+      };
+
+      /** Put back the input this optimization replaced. */
+      const revert = () => {
+        if (revertStack.length === 0) return;
+        const previous = revertStack[revertStack.length - 1];
+        setRevertStack((stack) => stack.slice(0, -1));
+        input.actions.setDraft(previous);
       };
 
       return h(
@@ -6070,18 +6669,35 @@ window.__ModuleLoader__.load({
               disabled: busy || draft.trim() === "",
               onClick: run,
             },
-            h("span", { className: "dts-optIcon", dangerouslySetInnerHTML: { __html: OPTIMIZE_ICON } }),
+            h("span", {
+              className: "dts-optIcon",
+              dangerouslySetInnerHTML: { __html: OPTIMIZE_ICON },
+            }),
             busy ? t("optimize.working") : t("optimize.button"),
           ),
+          // Only after a rewrite succeeded: the button is the visible promise
+          // that the previous text is recoverable, and an idle button that
+          // does nothing would be worse than none.
+          revertStack.length === 0
+            ? null
+            : h(
+                "button",
+                {
+                  type: "button",
+                  className: "dts-optRevert",
+                  disabled: busy,
+                  onClick: revert,
+                  title: t("optimize.revert.hint"),
+                },
+                t("optimize.revert"),
+              ),
           h(
             "span",
             { className: "dts-optTip", role: "tooltip" },
             t("optimize.hint"),
           ),
         ),
-        error === null
-          ? null
-          : h("span", { className: "dts-optError" }, error),
+        error === null ? null : h("span", { className: "dts-optError" }, error),
       );
     }
 
@@ -6200,6 +6816,10 @@ window.__ModuleLoader__.load({
                       return {
                         sessionId,
                         input: conversation.input.for(actx),
+                        // The ComposerBlockRegistry travels with the inject so
+                        // the button can block this session's input while the
+                        // optimizer runs and lift the block after.
+                        blocks: conversation.blocks,
                       };
                     } catch {
                       return { sessionId, input: undefined };
