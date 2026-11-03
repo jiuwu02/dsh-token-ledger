@@ -189,7 +189,6 @@ window.__ModuleLoader__.load({
       "settings.field.optimizerUseContext": "根据上下文优化提示词",
       "settings.fieldDesc.optimizerUseContext":
         "开启后，请求会附带当前会话上下文的摘录，改写会贴合正在进行的任务；摘录随每次点击发送，额外消耗 token。",
-      "settings.optimizer.contextUnavailable": "当前会话暂无可提供的上下文。",
       "settings.placeholder.inherit": "继承会话设置",
       "settings.fieldEmpty": "未设置",
       "range.label": "时间范围",
@@ -455,7 +454,6 @@ window.__ModuleLoader__.load({
       "settings.field.optimizerUseContext": "Optimize with context",
       "settings.fieldDesc.optimizerUseContext":
         "When on, the request carries an excerpt of the current session's context so the rewrite fits the ongoing task; the excerpt is sent on every click and costs extra tokens.",
-      "settings.optimizer.contextUnavailable": "The current session has no context to attach.",
       "settings.placeholder.inherit": "inherit from the session",
       "settings.fieldEmpty": "not set",
       "range.label": "Range",
@@ -2422,7 +2420,6 @@ window.__ModuleLoader__.load({
                         doc,
                         editable,
                         t,
-                        pressure,
                         onPatch: (patch) =>
                           setDraft((current) => ({ ...current, ...patch })),
                       })
@@ -3374,14 +3371,8 @@ window.__ModuleLoader__.load({
      * provider/model grid, then the toggle — because the two features share
      * one mental model ("what the plugin sends to a model on your behalf");
      * only the config keys and the toggle's meaning differ.
-     *
-     * The context readout reuses the context tab's pressure numbers rather
-     * than a second measurement: it is what the excerpt would be drawn from,
-     * and one source of truth cannot disagree with itself. When the pressure
-     * service is unavailable the tab still works — the toggle stays usable,
-     * the excerpt just starts from whatever the surface holds.
      */
-    function OptimizerTab({ draft, doc, editable, t, onPatch, pressure }) {
+    function OptimizerTab({ draft, doc, editable, t, onPatch }) {
       const fallback = doc?.value ?? {};
       const prompt =
         typeof draft.optimizerPrompt === "string"
@@ -3427,11 +3418,6 @@ window.__ModuleLoader__.load({
         return [{ value: "", label: t("settings.placeholder.inherit") }, ...rows];
       }, [groups, provider, t]);
 
-      const ratio =
-        pressure?.available === true && typeof pressure.ratio === "number"
-          ? pressure.ratio
-          : null;
-      const percentUsed = ratio === null ? null : Math.round(ratio * 100);
       return h(
         "div",
         { className: "dts-section" },
@@ -3460,62 +3446,6 @@ window.__ModuleLoader__.load({
             spellCheck: false,
             onChange: (event) => onPatch({ optimizerPrompt: event.target.value }),
           }),
-        ),
-        // The context readout sits above the switch that acts on it, so the
-        // state the excerpt is drawn from is visible while it is set.
-        h(
-          "div",
-          { className: "dts-field" },
-          h(
-            "div",
-            { className: "dts-fieldHead" },
-            h(
-              "span",
-              { className: "dts-fieldKey" },
-              t("settings.context.title"),
-            ),
-            ratio === null
-              ? null
-              : h(
-                  "span",
-                  { className: "dts-fieldValue" },
-                  `${percentUsed}%`,
-                ),
-          ),
-          pressure?.available !== true
-            ? h(
-                "p",
-                { className: "dts-fieldDesc" },
-                t("settings.optimizer.contextUnavailable"),
-              )
-            : h(
-                React.Fragment,
-                null,
-                h(
-                  "p",
-                  { className: "dts-fieldDesc" },
-                  h(
-                    "span",
-                    null,
-                    `${t("settings.context.used")} ${formatInt(pressure.totalTokens)}`,
-                  ),
-                  pressure.contextWindow === null
-                    ? ` · ${t("settings.context.noWindow")}`
-                    : ` / ${formatInt(pressure.contextWindow)}`,
-                ),
-                ratio === null
-                  ? null
-                  : h(
-                      "div",
-                      { className: "dts-fill" },
-                      h("div", {
-                        className: "dts-fillBar",
-                        "data-tone":
-                          ratio >= 0.75 ? "warn" : ratio >= 0.5 ? "busy" : "idle",
-                        style: { width: `${Math.min(100, percentUsed)}%` },
-                      }),
-                    ),
-              ),
         ),
         h(
           "div",
