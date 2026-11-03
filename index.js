@@ -772,14 +772,14 @@ export function apply(ctx, config) {
           if (!fence(req)) {
             writeJson(res, 403, {
               ok: false,
-              error: { code: "forbidden", message: "forbidden" },
+              error: { code: "forbidden", message: t("api.forbidden") },
             });
             return;
           }
           if (req.method !== "POST") {
             writeJson(res, 405, {
               ok: false,
-              error: { code: "method", message: "POST required" },
+              error: { code: "method", message: t("api.method") },
             });
             return;
           }
@@ -843,7 +843,7 @@ export function apply(ctx, config) {
                   ok: false,
                   error: {
                     code: "no-session",
-                    message: "no live agent for that session",
+                    message: t("api.noAgent"),
                   },
                 });
                 return;
@@ -878,7 +878,7 @@ export function apply(ctx, config) {
                   ok: false,
                   error: {
                     code: "invalid",
-                    message: "a non-empty prompt text is required",
+                    message: t("api.promptRequired"),
                   },
                 });
                 return;
@@ -889,7 +889,7 @@ export function apply(ctx, config) {
                   ok: false,
                   error: {
                     code: "no-session",
-                    message: "no live agent for that session",
+                    message: t("api.noAgent"),
                   },
                 });
                 return;
@@ -907,7 +907,7 @@ export function apply(ctx, config) {
                   ok: false,
                   error: {
                     code: "invalid",
-                    message: "a config object is required",
+                    message: t("api.configRequired"),
                   },
                 });
                 return;
@@ -929,19 +929,22 @@ export function apply(ctx, config) {
               ok: false,
               error: {
                 code: "not-found",
-                message: `unknown method "${method}"`,
+                message: t("api.unknownMethod", { method }),
               },
             });
           } catch (error) {
             ctx.logger?.warn?.(
               `dsh-token-panorama: ${ROUTE}/${method} failed: ${String(error)}`,
             );
+            const message =
+              error instanceof Error && typeof error.i18nKey === "string"
+                ? t(error.i18nKey, error.i18nValues)
+                : error instanceof Error
+                  ? error.message
+                  : String(error);
             writeJson(res, 500, {
               ok: false,
-              error: {
-                code: "internal",
-                message: error instanceof Error ? error.message : String(error),
-              },
+              error: { code: "internal", message },
             });
           }
         },

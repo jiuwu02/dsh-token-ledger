@@ -45,7 +45,7 @@ window.__ModuleLoader__.load({
 
     const ZH = {
       "nav.label": "Token 全景",
-      "page.title": "Token 用量全景",
+      "page.title": "Token 全景",
       "page.subtitle": "基于会话日志聚合，覆盖主会话与子代理。",
       "action.refresh": "刷新",
       "action.refreshing": "刷新中…",
@@ -69,6 +69,7 @@ window.__ModuleLoader__.load({
       "settings.importDone": "已导入 {models} 个模型的价格，确认无误后点保存。",
       "settings.importFailed": "导入失败：{error}",
       "settings.importInvalid": "文件格式不正确，不是本插件导出的计费配置。",
+      "settings.readError": "文件读取失败",
       "settings.loading": "正在读取配置…",
       "settings.saved": "已保存，正在重新计价。",
       "settings.inherited": "留空表示沿用默认值。",
@@ -83,7 +84,7 @@ window.__ModuleLoader__.load({
         "把当前会话的全部历史替换为一条占位记录（会话与日志完整保留）。需要会话空闲，运行中点击会被拒绝。",
       "context.compact": "压缩上下文",
       "context.compact.hint":
-        "启动子代理把已完成的历史压缩成一条摘要。会话运行中也能用：压缩期间新产生的对话原样保留，接在摘要之后。",
+        "用一次直接的模型调用把已完成的历史压缩成一条摘要。会话运行中也能用：压缩期间新产生的对话原样保留，接在摘要之后。",
       "optimize.button": "优化提示词",
       "optimize.hint":
         "把输入框里的提示词交给优化模型改写：目标更明确、约束更完整，只改提示词本身，不动附件与图片。",
@@ -125,6 +126,7 @@ window.__ModuleLoader__.load({
       "settings.peaks.windows": "高峰时段",
       "settings.peaks.addWindow": "添加时段",
       "settings.peaks.add": "新建方案",
+      "settings.peaks.aria": "峰谷方案",
       "settings.mode.everyday": "每天",
       "settings.mode.workday": "法定工作日（智能跳过节假日）",
       "settings.mode.holiday": "法定节假日（智能跳过工作日）",
@@ -152,8 +154,8 @@ window.__ModuleLoader__.load({
         "服务商计费所用的时区，决定每个时段的边界。",
       "settings.fieldDesc.currency": "显示在所有金额旁的单位标签。",
       "settings.field.compactPrompt": "压缩提示词",
-      "settings.field.compactProvider": "压缩子代理 Provider",
-      "settings.field.compactModel": "压缩子代理模型",
+      "settings.field.compactProvider": "压缩模型 Provider",
+      "settings.field.compactModel": "压缩模型",
       "settings.field.autoCompact": "自动压缩",
       "settings.field.autoCompactThreshold": "触发阈值",
       "settings.field.splitCompaction": "超出上限时分段压缩",
@@ -164,7 +166,7 @@ window.__ModuleLoader__.load({
       "settings.fieldDesc.splitCompaction":
         "关闭：历史超出压缩模型上限时丢弃最早的部分，只压缩最近能装下的记录。开启：按上限切成多段并行压缩，再由一个子代理整合成一份摘要，不丢历史。",
       "settings.splitCompactionHint":
-        "分段会同时发起多个子代理，耗时更短，但调用次数与费用更高；关闭时最早的历史会被丢弃。",
+        "分段会同时发起多个请求，耗时更短，但调用次数与费用更高；关闭时最早的历史会被丢弃。",
       "settings.context.title": "上下文占用",
       "settings.context.window": "上下文上限",
       "settings.context.used": "已占用",
@@ -176,7 +178,7 @@ window.__ModuleLoader__.load({
       "settings.context.unavailable": "无法读取当前会话的上下文占用。",
       "settings.context.noWindow": "所选模型未提供上下文上限，无法计算比例。",
       "settings.fieldDesc.compactPrompt":
-        "「压缩上下文」命令与绿色按钮把这段指令连同全部历史交给子代理，由它写出替换用的摘要。",
+        "「压缩上下文」命令与绿色按钮把这段指令连同全部历史交给压缩模型，由它写出替换用的摘要。",
       "settings.fieldDesc.compactProvider": "留空则沿用当前会话的 provider。",
       "settings.fieldDesc.compactModel": "留空则沿用当前会话的模型。",
       "settings.field.optimizerPrompt": "提示词优化指令",
@@ -291,6 +293,9 @@ window.__ModuleLoader__.load({
       "footer.source":
         "共 {sessions} 个会话（{main} 主会话 / {subagent} 子代理，{archived} 已归档），{calls} 次调用。",
       "footer.updated": "最后更新 {time}",
+      "error.routeUnavailable": "用量接口不可用",
+      "error.routeNonJson": "用量接口返回了非 JSON 响应",
+      "error.routeStatus": "用量接口请求失败（HTTP {status}）",
       "state.loading": "正在读取会话日志…",
       "state.error": "读取失败：{message}",
       "state.retry": "重试",
@@ -327,6 +332,7 @@ window.__ModuleLoader__.load({
       "settings.importFailed": "Import failed: {error}",
       "settings.importInvalid":
         "That file is not a billing configuration exported by this plugin.",
+      "settings.readError": "read error",
       "settings.loading": "Reading config…",
       "settings.saved": "Saved; re-pricing now.",
       "settings.inherited": "Leave a field empty to inherit its default.",
@@ -385,6 +391,7 @@ window.__ModuleLoader__.load({
       "settings.peaks.windows": "Peak windows",
       "settings.peaks.addWindow": "Add window",
       "settings.peaks.add": "New schedule",
+      "settings.peaks.aria": "peak schedule",
       "settings.mode.everyday": "Every day",
       "settings.mode.workday": "Statutory workdays (skips holidays)",
       "settings.mode.holiday": "Statutory holidays (skips workdays)",
@@ -559,6 +566,9 @@ window.__ModuleLoader__.load({
       "footer.source":
         "{sessions} sessions in total ({main} main / {subagent} subagent, {archived} archived), {calls} calls.",
       "footer.updated": "Updated {time}",
+      "error.routeUnavailable": "token-stats route unavailable",
+      "error.routeNonJson": "token-stats route returned a non-JSON response",
+      "error.routeStatus": "token-stats route failed with {status}",
       "state.loading": "Reading session logs…",
       "state.error": "Could not read usage: {message}",
       "state.retry": "Retry",
@@ -880,6 +890,15 @@ window.__ModuleLoader__.load({
      * is served with `<base href="./">`, so a root-absolute path escapes a
      * sub-path deployment.
      */
+    /**
+     * Translate one key through the bound translator.
+     *
+     * `post` runs in factory scope where the framework's `t` is out of reach,
+     * and before the plugin applies there is no translator at all, so the
+     * English row stands in.
+     */
+    const tr = (key) => (boundT ?? ((k) => EN[k] ?? k))(key);
+
     async function post(path, payload) {
       let response;
       try {
@@ -889,18 +908,18 @@ window.__ModuleLoader__.load({
           body: JSON.stringify(payload),
         });
       } catch {
-        throw new Error("token-stats route unavailable");
+        throw new Error(tr("error.routeUnavailable"));
       }
       let envelope;
       try {
         envelope = await response.json();
       } catch {
-        throw new Error("token-stats route returned a non-JSON response");
+        throw new Error(tr("error.routeNonJson"));
       }
       if (envelope?.ok === true) return envelope.value;
       throw new Error(
         envelope?.error?.message ??
-          `token-stats route failed with ${response.status}`,
+          tr("error.routeStatus").replace("{status}", String(response.status)),
       );
     }
 
@@ -2159,7 +2178,10 @@ window.__ModuleLoader__.load({
         reader.onerror = () =>
           setNote({
             tone: "error",
-            text: t("settings.importFailed").replace("{error}", "read error"),
+            text: t("settings.importFailed").replace(
+              "{error}",
+              t("settings.readError"),
+            ),
           });
         reader.readAsText(file);
       };
@@ -2625,7 +2647,7 @@ window.__ModuleLoader__.load({
               ? ""
               : String(row[field]),
           disabled: !editable,
-          "aria-label": `${model} ${field}`,
+          "aria-label": `${model} ${t("settings.models." + field)}`,
           onChange: (event) => {
             const raw = event.target.value;
             if (raw === "") {
@@ -2807,7 +2829,7 @@ window.__ModuleLoader__.load({
                             className: "dts-cellSelect",
                             value: row.peakProfile,
                             disabled: !editable,
-                            "aria-label": `${entry.model} peak schedule`,
+                            "aria-label": `${entry.model} ${t("settings.peaks.aria")}`,
                             onChange: (event) =>
                               onPatch(entry.model, {
                                 peakProfile: event.target.value,
@@ -2827,7 +2849,7 @@ window.__ModuleLoader__.load({
                               className: "dts-cellSelect",
                               value: "",
                               disabled: !editable,
-                              "aria-label": `${entry.model} peak schedule`,
+                              "aria-label": `${entry.model} ${t("settings.peaks.aria")}`,
                               onChange: (event) => {
                                 if (event.target.value === "") return;
                                 onPatch(entry.model, {
