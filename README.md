@@ -33,7 +33,7 @@ third-party dependency is required.
 - **Holiday auto-update** — any year is fetched at runtime and cached, so a new year needs no new build.
 - **Context actions** — Clear (orange) and Compact (green) buttons in the dock under the composer, plus the
   `/clear-context` and `/compact-context` commands. Compact runs mid-conversation: it fixes a cut before
-  summarizing, so every step taken while the subagent works stays verbatim behind the summary, and the
+  summarizing, so every step taken while the summarizer works stays verbatim behind the summary, and the
   checkpoint reuses the platform's own "context compacted" marker with the item and token counts. Clear
   replaces the whole surface and therefore requires an idle session.
 - **Bilingual** — Chinese and English follow the platform locale.
@@ -167,15 +167,16 @@ commands — `/clear-context` and `/compact-context` — so they work without th
 They differ in what they replace. Clear takes the whole surface and therefore needs an idle session: a step
 appending during the rewrite would be dropped with the history it belongs to. Compact takes only the span it
 selected *before* summarizing — up to the last cut that does not split a tool-call/result pair — so it works
-mid-conversation, and everything written while the subagent runs is replayed verbatim behind the checkpoint.
+mid-conversation, and everything written while the summarizer runs is replayed verbatim behind the checkpoint.
 The session and its log are untouched either way: the events stay on disk, the surface just no longer shows
 the replaced part, which is what frees the context window.
 
 - **Clear** writes a one-line placeholder. It is not a summary: nothing before the next message is retained.
-- **Compact** starts a subagent that reads the conversation and writes a summary, then replaces the cut with
-  it. The subagent inherits the session's provider and model unless the Context tab overrides them. Because a
-  fork only inherits *completed* turns, a span that reaches into the running turn is rendered to the subagent
-  as text instead — otherwise it would summarize a history missing the very messages being replaced.
+- **Compact** calls the model directly to write a summary, then replaces the cut with it. It runs on the
+  session's provider and model unless the Context tab overrides them. The span is replayed to it as the
+  messages it really holds — same system prompt, same tool definitions, instruction appended last — so the
+  provider's prefix cache covers the history and the call costs a cache read rather than a second full send.
+  No subagent is started, so the summarizer has no session, no tools of its own, and nothing it could edit.
 
 After either one, the transcript shows one command card and **no duplicate note under the buttons**. The two
 report genuinely different things: Clear gives the item and token counts before and after the swap, Compact
@@ -183,8 +184,8 @@ adds the character count of the summary it wrote. They ride the platform's own `
 events, so the card is visible and expandable but **never enters the surface** — the model's context is not
 polluted by its own bookkeeping.
 
-The prompt the compaction subagent reads is editable on the **Context** settings tab, which also picks the
-subagent's provider and model; leaving those empty inherits the session's. The default prompt asks for the
+The prompt the compaction model reads is editable on the **Context** settings tab, which also picks the
+model's provider and model; leaving those empty inherits the session's. The default prompt asks for the
 goal, decisions and their reasons, verbatim paths and signatures, error text, and open work — and forbids
 mentioning the compaction itself.
 
@@ -193,17 +194,25 @@ That tab has three more things about how much window is left:
 - **Context usage** is the live total for the current session, built from the real system prompt, tool
   definitions, and conversation messages, next to the selected model's input window, the share in use, and
   the three-part split.
-- The **automatic compaction** switch and its **trigger threshold** (75% by default) decide when the platform
-  compacts on its own, before the window is full. They are stored by this plugin but **enforced by the
-  platform's `dsh-compaction-basic`**: saving writes `auto` and `thresholdRatio` into that entry. If the
-  profile does not allow editing it, the save still succeeds and the modal says automatic compaction will not
-  run rather than pretending the switch is live.
-- Compaction **measures first**. A history already past two thirds of the summarizer's window makes the child
-  start from zero context with a head-and-tail excerpt instead of inheriting everything, and the omitted middle
-  is marked explicitly. That is the fix for long conversations that used to hang: such a request is larger than
-  any model can read, so retrying it could never have worked. When the span being compacted reaches into the
-  running turn, the excerpt renders that span rather than the whole surface, so the summary covers exactly what
-  the checkpoint will replace.
+- The **automatic compaction** switch and its **trigger threshold** (75% by default) decide when this plugin
+  compacts on its own, before the window is full. The trigger rides the same `agent/pre-step` event the
+  platform engine uses, but **this plugin runs it** and writes no platform config. A profile may disable that
+  engine outright — billion-context disables `dsh-compaction-basic` as a whole, and a preset's nested row is
+  not reachable through the config editor anyway — which left the old switch saved but enforcing nothing. The
+  decision is made on the three-part real total described above, not on the usage-anchored figure the platform
+  panel prints at the top: on a long session that one reads 112K while the same request really carries 2.3M.
+  Two compactions of one session are at least a minute apart, so a history that is still over the threshold right
+  after being summarized does not pay for another summary on the very next step.
+- **Segment when over the window** decides what happens once the history is larger than the summarizer's
+  window. Off: the oldest part is dropped, only the newest records that fit are summarized, and the excerpt says
+  how many were omitted. On: the span is cut into segments, each summarized **in parallel**, and a final request
+  merges them into the one summary that replaces the span — nothing is dropped, and no single request exceeds
+  the window, which is exactly what used to hang or come back empty.
+- Compaction **measures first**. A history past two thirds of the summarizer's window falls back to a
+  head-and-tail excerpt when segmenting is off: the head keeps the goal and the constraints, the tail keeps
+  whatever is in progress, and the omitted middle is marked explicitly. A span that reaches into the running
+  turn is no different: the summarizer is handed the messages themselves, so the summary still covers exactly
+  what the checkpoint will replace.
 - The **compaction lock** is opened before the summarizer is called, not after. A second request then answers
   "already in flight" instead of paying for the same summary twice, and the platform's own engine backs off
   rather than racing this one.
@@ -275,10 +284,10 @@ Host/Origin fence (`ctx.connection.requestRejection`) and be `POST` with a JSON 
 | `summary`    | `{"refresh": true}` | Force a full re-decode of every session.                        |
 | `refresh`    | `{}`                | Alias for a forced refresh.                                     |
 | `config`     | `{}`                | Return the live config, its field list, and editability. `models` carries the Host's live model catalog (each entry with its context window). |
-| `saveConfig` | `{"value": {...}}`  | Validate and persist a config; returns it with the field list, plus `compactSynced` saying whether the automatic-compaction switch reached the platform engine. |
+| `saveConfig` | `{"value": {...}}`  | Validate and persist a config; returns it with the field list. Automatic compaction runs in this plugin and writes no platform config, so there is no "did the mirror land" field. |
 | `holidays`   | `{}`                | Force a re-fetch; returns whether it changed and the per-year list. |
 | `clearContext` | `{"sessionId": "..."}` | Replace that session's whole surface with a placeholder. |
-| `compactContext` | `{"sessionId": "..."}` | Summarize that session through a subagent and replace the surface. |
+| `compactContext` | `{"sessionId": "..."}` | Summarize that session with a direct model call and replace the surface. |
 | `contextPressure` | `{"sessionId": "..."}` | Measure one session: total tokens, the system/tools/messages split, the routed model's context window, and the share in use. |
 
 Response shape:
@@ -357,7 +366,7 @@ lib/scan.js         Folding session events into hour × model slots
 lib/schema.js       Config schema, default price sheet, field descriptions
 lib/billing.js      Peak rules, pricing, legacy-config migrations
 lib/holidays.js     Network fetch, per-year cache, built-in seed
-lib/contextops.js   Surface replacement for clear / compact
+lib/contextops.js   Surface replacement for clear / compact, the real three-part measurement, and segmentation
 lib/store.js        Revision-keyed cache and the snapshot (per day / per model)
 lib/http.js         Request body reading and JSON responses
 client.js           Client half: panel, heatmap, trend chart, session tree, workspaces, export
@@ -387,8 +396,8 @@ never installed, and declaring one would only make the module fail to load.
 - The bundle reads session persistence and the archive list, registers one HTTP prefix route, and exposes one
   Config schema.
 - The context actions rewrite the session surface (the `compaction/*` pair plus one surface replacement), so they
-  need four platform services: `commands`, `tokenMeter`, `agents`, and `subagents`. On a profile missing any of
-  them those two buttons and commands are unavailable there; the statistics are unaffected. Replaced events are
-  never deleted from the log.
-- A compaction cannot rewrite until the subagent has finished writing, so one run takes as long as the session
+  need four platform services: `commands`, `tokenMeter`, `agents`, and `llm`. On a profile missing any of them
+  those two buttons and commands are unavailable there; the statistics are unaffected. Replaced events are never
+  deleted from the log.
+- A compaction cannot rewrite until the model has finished writing, so one run takes as long as the session
   length and chosen model require. The session stays usable throughout: the rewrite waits for it to go idle.

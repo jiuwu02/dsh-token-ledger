@@ -28,16 +28,20 @@ import {
   agentForSession,
   clearContext,
   compactContext,
+  measureContext,
 } from "./lib/contextops.js";
 export const name = "dsh-token-ledger";
 // `commands` joins the list because the two context commands are registered at
-// apply time, and `tokenMeter`/`agents`/`subagents` because the context
-// operations read them directly: a service is only readable once declared, and
-// the failure mode is a thrown error at first use rather than a missing
-// dependency at load. `llm` is here for the same reason — the settings page
-// lists the models this profile can actually route, with the context window
-// each one declares. The panel's own reads still go through `ctx.get` so it
-// keeps working on a profile that has dropped one of them.
+// apply time, and `tokenMeter`/`agents` because the context operations read them
+// directly: a service is only readable once declared, and the failure mode is a
+// thrown error at first use rather than a missing dependency at load. `llm` is
+// here for the same reason — compaction calls it directly, and the settings
+// page lists the models this profile can actually route, with the context
+// window each one declares. The panel's own reads still go through `ctx.get`
+// so it keeps working on a profile that has dropped one of them.
+//
+// `subagents` used to be here and is deliberately gone: compaction no longer
+// delegates, so declaring the service would claim a dependency nothing reads.
 export const inject = [
   "webServer",
   "connection",
@@ -45,7 +49,6 @@ export const inject = [
   "commands",
   "tokenMeter",
   "agents",
-  "subagents",
   "llm",
 ];
 
@@ -59,10 +62,30 @@ export { Config };
 /** Prefix route owned by this plugin. */
 const ROUTE = "/token-stats/api";
 
+/**
+ * How long a failed automatic compaction suppresses its own retry.
+ *
+ * A retry is worth making once the session has moved on — the summarizer route
+ * may have recovered, or the lock may have cleared — but not on every step of a
+ * turn that keeps failing for the same reason. A minute is long enough that a
+ * broken route costs one subagent per minute instead of one per step, and short
+ * enough that a transient failure is retried while the user is still watching.
+ */
+const AUTO_RETRY_MS = 60_000;
+
 export function apply(ctx, config) {
   const holidays = new HolidayStore(ctx);
   let rules = billingRules(config ?? {}, holidays.sets());
   const index = new UsageIndex(ctx, rules);
+  /**
+   * When each session last failed an automatic compaction, keyed on the session
+   * object itself.
+   *
+   * Weak so a closed session leaves nothing behind, and keyed on the identity
+   * rather than the id so a reopened log starts clean. The value is when the
+   * attempt started; see `autoCompactStep` for why success does not clear it.
+   */
+  const autoAttempts = new WeakMap();
 
   /**
    * Host-side copy, resolved per call.
@@ -140,51 +163,116 @@ export function apply(ctx, config) {
     }
   };
 
-  /** The platform's own compaction engine entry, the one the switch writes to. */
-  const COMPACTION_PACKAGE = "@deepseek-ai/dsh-compaction-basic";
+  /**
+   * Compact this session if its real context total has reached the threshold.
+   *
+   * The trigger lives here rather than in the platform's own engine because a
+   * profile is free to disable that engine, and this one does: billion-context
+   * gates `dsh-compaction-basic` off at config level, and its row sits inside an
+   * agent preset where the config editor cannot reach it. A switch that only
+   * wrote `auto` there saved a value nothing read. Owning the trigger is what
+   * makes the setting do something on this profile, and on any profile that
+   * mounts a different engine or none at all.
+   *
+   * Four conditions must hold, and each one is a reason a compaction would
+   * otherwise fail or duplicate work:
+   *
+   * - the switch is on, and the session was routed with a known window;
+   * - the measured three-part total, divided by that window, reaches the
+   *   threshold — the same numbers the settings panel draws;
+   * - the session is not already compacting, which `compactContext` checks
+   *   itself rather than duplicating here;
+   * - no attempt failed within the last minute. A retry that cannot succeed —
+   *   a summarizer route that errors, a surface that refuses to shrink, a lock
+   *   another engine holds — would otherwise fire on every single step and pay
+   *   for a subagent each time. Keying that guard on the log tail would not
+   *   help: a running turn appends to the tail continuously, so the guard would
+   *   never hold. Only elapsed time bounds the cost.
+   *
+   * A subagent session is skipped: it inherits a parent's history and compacting
+   * it would rewrite a log the user never opened.
+   * @param agent - the agent about to take a step.
+   * @returns whether a compaction ran.
+   */
+  const autoCompactStep = async (agent) => {
+    if (config?.autoCompact !== true) return false;
+    const session = agent?.session;
+    if (session === undefined || session === null) return false;
+    // A child agent's session carries `origin: "subagent"`; its surface belongs
+    // to the parent's request, not to something the user can inspect.
+    if (session.header?.origin === "subagent") return false;
+    const measured = measureContext(ctx, session);
+    if (measured === null || measured.totalTokens === 0) return false;
+    // The window that matters is the one the session's own requests are sent
+    // against, not the summarizer's: overflow happens on that route, and a
+    // summarizer with a smaller window would make this fire far too early.
+    // The configured target is only a fallback for a session that has not been
+    // routed yet.
+    const requested = session.requestHeader?.()?.config;
+    const provider = requested?.provider || config?.compactProvider;
+    const model = requested?.model || config?.compactModel;
+    const llm = ctx.get("llm");
+    if (llm === undefined || !provider || !model) return false;
+    let contextWindow = null;
+    try {
+      const info = await llm.resolveModelInfo(provider, model);
+      contextWindow = info?.context?.contextWindow ?? null;
+    } catch {
+      return false;
+    }
+    if (!Number.isInteger(contextWindow) || contextWindow <= 0) return false;
+    const threshold = config?.autoCompactThreshold ?? 0.75;
+    if (measured.totalTokens / contextWindow < threshold) return false;
+    // Recorded before the attempt, not after, so two steps dispatching at once
+    // cannot both pay for the same summary. The entry is kept for the whole
+    // window rather than cleared on success: a session that is still over the
+    // threshold right after a compaction would otherwise compact again on the
+    // very next step, paying a subagent per step to shrink a history that has
+    // barely grown. One compaction a minute is the floor; a healthy session
+    // spends minutes between crossings, so it never notices.
+    const previous = autoAttempts.get(session);
+    if (previous !== undefined && Date.now() - previous.at < AUTO_RETRY_MS)
+      return false;
+    autoAttempts.set(session, { at: Date.now() });
+    // Two refusals worth catching before paying for a summary: a compaction
+    // already open, and a surface that has moved since it was measured. Both
+    // throw from `compactContext`, and both are normal rather than faults.
+    try {
+      const result = await compactContext(ctx, agent, compactOptions());
+      return result !== null;
+    } catch (error) {
+      // Automatic compaction is a background improvement: a session that cannot
+      // be compacted right now must still take its step, so the failure is
+      // logged and the turn continues — the same tradeoff the platform's engine
+      // makes when it warns and returns `next()`.
+      ctx.logger?.warn?.(
+        `dsh-token-ledger: automatic compaction skipped: ${String(error)}`,
+      );
+      return false;
+    }
+  };
 
   /**
-   * Mirror the automatic-compaction switch into `dsh-compaction-basic`.
+   * Register the pre-step trigger, when this composition dispatches that event.
    *
-   * The switch deliberately does not run a second compaction engine. The
-   * platform already decides *when* to compact, from `agent/pre-step`, using
-   * the same `tokenMeter` measurement this plugin's fill bar shows; a second
-   * engine firing on the same event would either duplicate the work or race
-   * the first one's surface replacement. So the switch owns two numbers and
-   * writes them where that engine reads them: `auto` and `thresholdRatio`.
-   *
-   * Two cases are silently not written. The entry may be absent from a
-   * composition that mounts a different engine, and the editor may refuse
-   * because this profile is not editable — both leave the user's config
-   * intact, and `readConfig` reports what actually took effect, so the UI
-   * never claims a write that did not happen.
-   * @param next - the config that was just validated.
-   * @returns whether the platform entry was updated.
+   * The listener answers the same `agent/pre-step` waterfall the platform's
+   * engine uses and always calls `next()`, so it can only ever delay a step, not
+   * veto one. A composition without the event keeps working: the settings page
+   * and the two commands do not depend on it, and `autoCompactStep` remains
+   * available to them.
    */
-  const syncCompactionEngine = async (next) => {
-    const editor = ctx.get("configEditor");
-    if (editor === undefined) return false;
-    let target;
-    try {
-      target = editor
-        .entries()
-        .find((entry) => entry.options?.name === COMPACTION_PACKAGE);
-    } catch {
-      return false;
-    }
-    if (target === undefined) return false;
-    try {
-      await editor.edit(target, (current) => ({
-        ...(current ?? {}),
-        auto: next.autoCompact === true,
-        thresholdRatio: next.autoCompactThreshold,
-      }));
-      return true;
-    } catch {
-      // The Loader replaces the edited entry's fiber while this request is in
-      // flight, so a refusal here is a normal outcome rather than a fault.
-      return false;
-    }
+  const registerAutoCompaction = () => {
+    if (typeof ctx.on !== "function") return;
+    ctx.on("agent/pre-step", async (payload, next) => {
+      try {
+        await autoCompactStep(payload?.agent);
+      } catch (error) {
+        ctx.logger?.warn?.(
+          `dsh-token-ledger: pre-step compaction failed: ${String(error)}`,
+        );
+      }
+      return typeof next === "function" ? next() : undefined;
+    });
   };
 
   /**
@@ -306,18 +394,21 @@ export function apply(ctx, config) {
   /**
    * Live context pressure for one session, against the limit that applies.
    *
-   * The settings page draws a fill bar under the threshold slider, and the
-   * number behind it has to be the same one the platform's own compaction
-   * uses or the slider lies. That number is `tokenMeter.measure`, which prices
-   * the whole current surface and adds the tool schemas from the latest
-   * request envelope; the three-way split shown beside it comes from the
-   * `contextBreakdown` projection, whose definition is deliberately the
-   * platform's own system/tools/message division.
+   * The number here is the real size of the request the next step would send:
+   * system prompt, tool schemas and every conversation message, added the way
+   * the model's window is actually spent. That is deliberately not
+   * `tokenMeter.measure().totalTokens`. That figure anchors on the provider's
+   * own `usage` and adds a surface delta, so a long session can report 112K
+   * while the same request really carries 2.3M — the two numbers disagree
+   * because they answer different questions, and a threshold set against the
+   * first one fires late or never. The panel in the platform's own chat shows
+   * both side by side for the same reason; this plugin has to pick one, and
+   * the one that predicts a context-overflow failure is the real total.
    *
-   * The model whose window divides the total is, in order: the configured
-   * compaction target when there is one, the session's last routed route, and
-   * nothing — in which case the ratio is reported as unknown rather than
-   * guessed.
+   * The model whose window divides it is the session's own last routed route,
+   * because that is the window a request would overflow; the configured
+   * compaction target is only a fallback before the first request. With
+   * neither, the ratio is reported as unknown rather than guessed.
    * @param sessionId - the session the dock buttons were rendered for.
    * @returns the measured pressure, or a reason it cannot be measured.
    */
@@ -325,11 +416,11 @@ export function apply(ctx, config) {
     const agent = agentForSession(ctx, sessionId);
     if (agent === undefined) return { available: false, reason: "no-session" };
     const session = agent.session;
-    const meter = ctx.get("tokenMeter");
-    if (meter === undefined) return { available: false, reason: "no-meter" };
-    let measurement;
+    if (ctx.get("tokenMeter") === undefined)
+      return { available: false, reason: "no-meter" };
+    let measured;
     try {
-      measurement = meter.measure(session);
+      measured = measureContext(ctx, session);
     } catch (error) {
       return {
         available: false,
@@ -337,30 +428,10 @@ export function apply(ctx, config) {
         message: error instanceof Error ? error.message : String(error),
       };
     }
-    let breakdown = null;
-    try {
-      const projections = ctx.get("sessionProjections");
-      const snapshot = projections?.snapshot?.(session, ["contextBreakdown"]);
-      const value = snapshot?.values?.contextBreakdown;
-      if (
-        value !== null &&
-        value !== undefined &&
-        typeof value.systemTokens === "number" &&
-        typeof value.toolsTokens === "number" &&
-        typeof value.messageTokens === "number"
-      )
-        breakdown = {
-          systemTokens: value.systemTokens,
-          toolsTokens: value.toolsTokens,
-          messageTokens: value.messageTokens,
-        };
-    } catch {
-      // A missing projection registry only costs the split, not the total:
-      // the threshold is decided by `measure` alone.
-    }
+    if (measured === null) return { available: false, reason: "no-meter" };
     const requested = session.requestHeader?.();
-    const provider = config?.compactProvider || requested?.config?.provider;
-    const model = config?.compactModel || requested?.config?.model;
+    const provider = requested?.config?.provider || config?.compactProvider;
+    const model = requested?.config?.model || config?.compactModel;
     let contextWindow = null;
     const llm = ctx.get("llm");
     if (llm !== undefined && provider && model) {
@@ -372,7 +443,7 @@ export function apply(ctx, config) {
         // measured total and the slider without a fill bar.
       }
     }
-    const totalTokens = count(measurement.totalTokens);
+    const totalTokens = count(measured.totalTokens);
     return {
       available: true,
       provider: provider ?? null,
@@ -385,7 +456,16 @@ export function apply(ctx, config) {
         contextWindow === null || contextWindow <= 0
           ? null
           : totalTokens / contextWindow,
-      breakdown,
+      // Drawn from the same walk as the total, so the three rows can never add
+      // up to a different number than the bar above them.
+      breakdown: {
+        systemTokens: count(measured.systemTokens),
+        toolsTokens: count(measured.toolsTokens),
+        messageTokens: count(measured.messageTokens),
+      },
+      // What the provider's own accounting last reported, for comparison in
+      // the panel. Nothing is decided from it.
+      usageTokens: measured.usageTokens,
     };
   };
 
@@ -427,6 +507,7 @@ export function apply(ctx, config) {
         compactModel: config?.compactModel ?? "",
         autoCompact: config?.autoCompact ?? false,
         autoCompactThreshold: config?.autoCompactThreshold ?? 0.75,
+        splitCompaction: config?.splitCompaction === true,
       },
       override,
       editable: editor !== undefined && entry !== undefined,
@@ -456,7 +537,7 @@ export function apply(ctx, config) {
    * than re-reading them, and the Client refreshes the panel to pick up the new
    * instance's numbers.
    * @param next - the raw config the modal submitted.
-   * @returns the config after validation plus whether the platform mirror took.
+   * @returns the config after validation.
    */
   const saveConfig = async (next) => {
     const editor = ctx.get("configEditor");
@@ -470,25 +551,23 @@ export function apply(ctx, config) {
       throw new Error(error instanceof Error ? error.message : String(error));
     }
     await editor.edit(entry, () => resolved);
-    // The mirror runs after this plugin's own row is durable: if it fails the
-    // switch is still saved, and the modal can tell the user that automatic
-    // compaction was not applied here rather than losing their edit.
-    const compactSynced = await syncCompactionEngine(resolved);
-    return { resolved, compactSynced };
+    return { resolved };
   };
 
   /**
    * The context knobs the two operations read.
    *
-   * Kept as one accessor so the commands and the dock buttons cannot drift:
-   * both must run on the instruction the modal last saved, not on a default
-   * captured when this instance booted.
-   * @returns the prompt plus the optional provider/model override.
+   * Kept as one accessor so the commands, the dock buttons and the automatic
+   * trigger cannot drift: all three must run on the instruction the modal last
+   * saved, not on a default captured when this instance booted.
+   * @returns the prompt, the optional provider/model override, and whether a
+   *   history larger than the summarizer's window is segmented.
    */
   const compactOptions = () => ({
     prompt: config?.compactPrompt ?? "",
     provider: config?.compactProvider ?? "",
     model: config?.compactModel ?? "",
+    split: config?.splitCompaction === true,
   });
 
   /**
@@ -582,6 +661,8 @@ export function apply(ctx, config) {
       text: execution.result.text ?? t(`report.${op}Empty`),
     };
   };
+
+  registerAutoCompaction();
 
   // Both commands share one shape: resolve the agent from the invocation, run
   // the operation, and answer in the transcript. `definitionId` is omitted
@@ -749,7 +830,7 @@ export function apply(ctx, config) {
                 });
                 return;
               }
-              const { resolved, compactSynced } = await saveConfig(body.value);
+              const { resolved } = await saveConfig(body.value);
               writeJson(res, 200, {
                 ok: true,
                 value: {
@@ -758,11 +839,6 @@ export function apply(ctx, config) {
                   value: resolved,
                   override: resolved,
                   editable: true,
-                  // The switch is stored on this plugin but enforced by the
-                  // platform's engine, so the Client needs to know when the
-                  // mirror did not land; otherwise it would show the toggle as
-                  // active while nothing compacts.
-                  compactSynced,
                 },
               });
               return;

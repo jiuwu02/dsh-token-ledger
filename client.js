@@ -145,12 +145,15 @@ window.__ModuleLoader__.load({
       "settings.field.compactModel": "压缩子代理模型",
       "settings.field.autoCompact": "自动压缩",
       "settings.field.autoCompactThreshold": "触发阈值",
+      "settings.field.splitCompaction": "超出上限时分段压缩",
       "settings.fieldDesc.autoCompact":
-        "开启后由平台在每一步开始前按真实占用判定，达到阈值就自动压缩，无需手动点按钮。",
+        "开启后由本插件在每一步开始前按真实占用判定，达到阈值就自动压缩，无需手动点按钮。",
       "settings.autoCompactThresholdHint":
         "按「系统提示词 + 工具定义 + 对话消息」的真实总占用，占所选模型输入上下文上限的比例。",
-      "settings.compactNotSynced":
-        "已保存，但未能写入平台的自动压缩引擎（该 profile 可能不允许编辑它），自动压缩不会生效。",
+      "settings.fieldDesc.splitCompaction":
+        "关闭：历史超出压缩模型上限时丢弃最早的部分，只压缩最近能装下的记录。开启：按上限切成多段并行压缩，再由一个子代理整合成一份摘要，不丢历史。",
+      "settings.splitCompactionHint":
+        "分段会同时发起多个子代理，耗时更短，但调用次数与费用更高；关闭时最早的历史会被丢弃。",
       "settings.context.title": "上下文占用",
       "settings.context.window": "上下文上限",
       "settings.context.used": "已占用",
@@ -158,6 +161,7 @@ window.__ModuleLoader__.load({
       "settings.context.system": "系统提示词",
       "settings.context.tools": "工具定义",
       "settings.context.messages": "对话消息",
+      "settings.context.usage": "计费侧最后上报的用量 {tokens}，与上方三项总和不属同一口径。",
       "settings.context.unavailable": "无法读取当前会话的上下文占用。",
       "settings.context.noWindow": "所选模型未提供上下文上限，无法计算比例。",
       "settings.fieldDesc.compactPrompt":
@@ -315,7 +319,7 @@ window.__ModuleLoader__.load({
         "Replace the whole session history with one placeholder record (session and log stay intact). The session must be idle; a click mid-turn is refused.",
       "context.compact": "Compact context",
       "context.compact.hint":
-        "Let a subagent compress the completed history into one summary. Works mid-conversation: whatever the session writes while it runs stays verbatim behind the summary.",
+        "Compress the completed history into one summary with a direct model call. Works mid-conversation: whatever the session writes while it runs stays verbatim behind the summary.",
       "settings.models.title": "Model prices",
       "settings.models.hint":
         "Priced per million tokens, four items apart: uncached input, cache-hit input, cache write, output. Enter 0 for anything a provider does not bill. The cache-hit rate is not a flat 10% — DeepSeek charges 2%, and assuming otherwise overstates a cache-heavy bill several times over. Turning on peak pricing scales all four rates by the schedule.",
@@ -382,16 +386,19 @@ window.__ModuleLoader__.load({
         "The zone the provider bills in; it decides every band boundary.",
       "settings.fieldDesc.currency": "The label shown beside every amount.",
       "settings.field.compactPrompt": "Compaction prompt",
-      "settings.field.compactProvider": "Compaction subagent provider",
-      "settings.field.compactModel": "Compaction subagent model",
+      "settings.field.compactProvider": "Compaction model provider",
+      "settings.field.compactModel": "Compaction model",
       "settings.field.autoCompact": "Automatic compaction",
       "settings.field.autoCompactThreshold": "Trigger threshold",
+      "settings.field.splitCompaction": "Segment when over the window",
       "settings.fieldDesc.autoCompact":
-        "When on, the platform checks real usage before every step and compacts automatically at the threshold; no button press needed.",
+        "When on, this plugin checks real usage before every step and compacts automatically at the threshold; no button press needed.",
       "settings.autoCompactThresholdHint":
         "Share of the selected model's input window taken by the real total of system prompt, tool definitions, and conversation messages.",
-      "settings.compactNotSynced":
-        "Saved, but the platform's compaction engine could not be updated (this profile may not allow editing it), so automatic compaction will not run.",
+      "settings.fieldDesc.splitCompaction":
+        "Off: history larger than the summarizer's window loses its oldest records and only the newest that fit are summarized. On: the history is cut into segments that are summarized in parallel and merged into one summary, keeping all of it.",
+      "settings.splitCompactionHint":
+        "Segmenting issues several requests at once, so it is faster but calls the model more often and costs more; turning it off discards the oldest history.",
       "settings.context.title": "Context usage",
       "settings.context.window": "Context window",
       "settings.context.used": "In use",
@@ -399,12 +406,14 @@ window.__ModuleLoader__.load({
       "settings.context.system": "System prompt",
       "settings.context.tools": "Tool definitions",
       "settings.context.messages": "Messages",
+      "settings.context.usage":
+        "Last usage reported by the provider: {tokens}. That figure is accounted differently from the three-part total above.",
       "settings.context.unavailable":
         "The current session's context usage could not be read.",
       "settings.context.noWindow":
         "The selected model reports no context window, so no share can be computed.",
       "settings.fieldDesc.compactPrompt":
-        "The compact-context command and the green button hand this instruction, plus the whole history, to a subagent that writes the replacement summary.",
+        "The compact-context command and the green button send this instruction, last, after the whole history; the model writes the replacement summary.",
       "settings.fieldDesc.compactProvider":
         "Empty keeps the session's provider.",
       "settings.fieldDesc.compactModel": "Empty keeps the session's model.",
@@ -2098,15 +2107,7 @@ window.__ModuleLoader__.load({
           const result = await api.saveConfig(draft);
           setDoc(result);
           setDraft(result.value ?? result.override ?? {});
-          // The switch is enforced by the platform's compaction engine, not by
-          // this plugin, so a mirror that did not land means the toggle would
-          // look active while nothing compacts. Say so instead of claiming a
-          // clean save.
-          setNote(
-            result.compactSynced === false && result.value?.autoCompact === true
-              ? { tone: "warn", text: t("settings.compactNotSynced") }
-              : { tone: "ok", text: t("settings.saved") },
-          );
+          setNote({ tone: "ok", text: t("settings.saved") });
           onSaved();
         } catch (error) {
           setNote({ tone: "error", text: error.message });
@@ -3316,6 +3317,10 @@ window.__ModuleLoader__.load({
         typeof draft.autoCompactThreshold === "number"
           ? draft.autoCompactThreshold
           : (fallback.autoCompactThreshold ?? 0.75);
+      const splitCompaction =
+        typeof draft.splitCompaction === "boolean"
+          ? draft.splitCompaction
+          : (fallback.splitCompaction ?? false);
 
       /**
        * The catalog the Host reported, flattened to picker options.
@@ -3359,7 +3364,10 @@ window.__ModuleLoader__.load({
           ? pressure.ratio
           : null;
       const breakdown = pressure?.available === true ? pressure.breakdown : null;
-      const fill = ratio === null ? null : Math.min(100, Math.round(ratio * 100));
+      // The bar stops at a full track, but the label does not: a session over
+      // the window reads "230%", not a reassuring "100%".
+      const percentUsed = ratio === null ? null : Math.round(ratio * 100);
+      const fill = ratio === null ? null : Math.min(100, percentUsed);
       return h(
         "div",
         { className: "dts-section" },
@@ -3407,7 +3415,7 @@ window.__ModuleLoader__.load({
               : h(
                   "span",
                   { className: "dts-fieldValue" },
-                  `${fill}%`,
+                  `${percentUsed}%`,
                 ),
           ),
           pressure?.available !== true
@@ -3431,6 +3439,20 @@ window.__ModuleLoader__.load({
                     ? ` · ${t("settings.context.noWindow")}`
                     : ` / ${formatInt(pressure.contextWindow)}`,
                 ),
+                // The total above is the real request size; the provider's own
+                // accounting is a different question and can read an order of
+                // magnitude lower on a long cached session. Showing it beside
+                // the real one explains the difference instead of hiding it.
+                typeof pressure.usageTokens === "number" &&
+                pressure.usageTokens > 0
+                  ? h(
+                      "p",
+                      { className: "dts-fieldDesc" },
+                      t("settings.context.usage", {
+                        tokens: formatInt(pressure.usageTokens),
+                      }),
+                    )
+                  : null,
                 ratio === null
                   ? null
                   : h(
@@ -3585,6 +3607,37 @@ window.__ModuleLoader__.load({
             "p",
             { className: "dts-fieldDesc" },
             t("settings.autoCompactThresholdHint"),
+          ),
+        ),
+        h(
+          "div",
+          { className: "dts-field" },
+          h(
+            "div",
+            { className: "dts-fieldHead" },
+            h(
+              "span",
+              { className: "dts-fieldKey" },
+              t("settings.field.splitCompaction"),
+            ),
+            h("input", {
+              type: "checkbox",
+              className: "dts-check",
+              checked: splitCompaction,
+              disabled: !editable,
+              onChange: (event) =>
+                onPatch({ splitCompaction: event.target.checked }),
+            }),
+          ),
+          h(
+            "p",
+            { className: "dts-fieldDesc" },
+            t("settings.fieldDesc.splitCompaction"),
+          ),
+          h(
+            "p",
+            { className: "dts-fieldDesc" },
+            t("settings.splitCompactionHint"),
           ),
         ),
       );
