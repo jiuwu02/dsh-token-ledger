@@ -8,3 +8,5 @@ Thumbs.db
 *.tgz
 plain-tmp/
 .tmp-asar/
+.tmp-test/
+.mnemon/

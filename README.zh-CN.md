@@ -1,4 +1,4 @@
-# Token Panorama for DSH（Token 全景 · 中文说明）
+# Token Panorama for DSH（用量概览 · 中文说明）
 
 一个 DeepSeek Harness 功能插件，看清全部会话的 token 去向：一个面板汇总累计总量、日历热力图、趋势曲线、
 模型分布、逐会话用量明细，以及 CSV / JSON 导出。另带两组工具：上下文清理 / 压缩按钮，以及提示词优化按钮。
@@ -216,7 +216,8 @@ provider 与模型，留空即沿用会话的。默认提示词要求写清目�
 ## 数据统计口径
 
 - **数据源**：Host 的 `sessionPersistence` 服务列出全部会话及其不透明版本号 `revision`。版本号未变的会话直接
-  跳过；变化的会话以只读方式打开并解码事件流。
+  跳过；其余会话先只走一遍日志的 Zstandard 帧表（不解压），只解码上次扫描之后新增的帧——语料没变时
+  一个字节都不解压，需要重读时也只解码日志尾部而不是整段历史。
 - **计数**：每条带 `data.usage` 的 `assistant/message` 事件计为一次调用。总量优先取 `usage.totalTokens`，
   缺失时回退为 `inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens`。
 - **范围**：当前 profile 下的全部会话，包含子代理会话（`header.origin === 'subagent'`）与已归档会话；
@@ -226,8 +227,12 @@ provider 与模型，留空即沿用会话的。默认提示词要求写清目�
 - **工作区**：取会话头事件（`type: "session"`）里的 `cwd`；没有 cwd 的会话归到「(无工作区)」。
 - **父子关系**：取会话头里的 `parentSession`。父会话不在本次统计内时，该子代理按顶层条目展示。
 - **时间桶**：按事件时间戳所处的本地日历日归类；计费额外按小时划分，小时桶用配置时区换算。
-- **缓存**：折叠结果写入 `~/.dsh/storages/dsh-token-panorama/usage-cache.json`（`CACHE_VERSION = 3`），
-  通过临时文件 + 重命名原子写入。
+- **缓存**：折叠结果写入 `~/.dsh/storages/dsh-token-panorama/usage-cache.json`（`CACHE_VERSION = 5`），
+  通过临时文件 + 重命名原子写入。每条记录同时保存已折叠到的字节偏移与最大序号，下一轮可直接续读。
+- **投影种子**：Host 挂载 `sessionProjections` 时，本插件注册自己的折叠单元（`tokenPanoramaUsage`），
+  由 Host 在事件提交时持续维护。投影行已经追平日志末尾的会话完全不读日志，直接采用该行。只有在状态版本、
+  时区、水位线和日志身份全部吻合时才采信；任何一项不吻合就退回读日志，所以种子只会省事，不会改变结果。
+  没有该服务时行为与原先一致。读不出来的日志按 `revision` 记住十分钟，不再每轮重复解码。
 - **准确性**：总量严格等于底层 `usage` 记录之和，面板不做任何估算；会话行跟随所选时间范围，
   各会话在该范围内的用量之和与热力图对应日期完全一致；成本按小时计价后汇入日、模型与会话三个维度，
   三者的求和恒等于总量。
@@ -240,7 +245,7 @@ Host 在 `/token-stats/api` 注册前缀路由。请求必须通过平台的 Hos
 | 方法         | 请求体              | 说明                                            |
 | ------------ | ------------------- | ----------------------------------------------- |
 | `summary`    | `{}`                | 返回当前快照，仅重新扫描发生变化的会话。        |
-| `summary`    | `{"refresh": true}` | 强制重新解码全部会话。                          |
+| `summary`    | `{"refresh": true}` | 不信任本插件的折叠结果并重建，仍会采用能通过校验的 Host 投影行。 |
 | `refresh`    | `{}`                | 等价于强制刷新。                                |
 | `config`     | `{}`                | 返回当前配置、字段描述与可编辑状态；`models` 附 Host 实时模型目录（含各自上下文上限）。 |
 | `saveConfig` | `{"value": {...}}`  | 校验并保存配置，返回保存后的配置与字段描述。自动压缩由本插件执行，不写任何平台配置，因此没有「是否同步成功」这一项。 |
@@ -333,7 +338,9 @@ lib/schema.js       Config schema、默认价目表、字段描述
 lib/billing.js      峰谷判定、计价、旧配置迁移
 lib/holidays.js     节假日联网拉取、按年缓存、内置种子
 lib/contextops.js   清空 / 压缩上下文的表面替换事务、真实三项测量、分段与整合
-lib/store.js        增量缓存与快照（逐日 / 逐模型聚合）
+lib/store.js        增量缓存、帧级扫描与快照（逐日 / 逐模型聚合）
+lib/frames.js       遍历日志的 Zstandard 帧表，只解码新增部分
+lib/projection.js   交给 Host 持续维护的 tokenPanoramaUsage 投影单元
 lib/http.js         请求体读取与 JSON 响应
 client.js           Client 半：面板、热力图、趋势图、折叠会话树、工作区、导出
 locale/en.json      插件元数据（英文）

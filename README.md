@@ -261,7 +261,10 @@ no such service or no matching row, the window degrades to read-only and says wh
 ## How the data is collected
 
 - **Source**: the Host `sessionPersistence` service lists every session with an opaque `revision`. Sessions
-  whose revision is unchanged are skipped; changed ones are opened read-only and their events decoded.
+  whose revision is unchanged are skipped. For the rest, the log's Zstandard frames are walked without
+  inflating them, so only the frames appended since the last pass are decoded — a pass over an
+  unchanged corpus decodes nothing at all, and one that has to re-read a session decodes its tail
+  rather than its whole history.
 - **Counting**: each `assistant/message` event carrying `data.usage` contributes one call. The total prefers
   `usage.totalTokens`, falling back to `inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens`.
 - **Scope**: every session in the profile, including subagent sessions (`header.origin === 'subagent'`) and
@@ -277,7 +280,15 @@ no such service or no matching row, the window degrades to read-only and says wh
 - **Buckets**: usage is keyed by the local calendar day of the event timestamp; billing additionally splits by
   hour, converted through the configured zone.
 - **Cache**: the folded result is written to `~/.dsh/storages/dsh-token-panorama/usage-cache.json`
-  (`CACHE_VERSION = 3`), written atomically via a temp file and rename.
+  (`CACHE_VERSION = 5`), written atomically via a temp file and rename. Each record also carries the
+  byte offset and the highest sequence number it has folded, which is what lets the next pass resume.
+- **Projection seed**: when the Host's `sessionProjections` service is present, the plugin registers its
+  own fold (`tokenPanoramaUsage`) so the Host keeps it current as events are committed. A session whose
+  projection row is already at the log's end is adopted without reading the log at all. The row is used
+  only after its state version, zone, watermark and log identity all agree; anything else falls back to
+  reading the log, so the seed can save work but never change an answer. Without the service the plugin
+  works as before. An unreadable log is remembered by revision for ten minutes instead of being decoded
+  again on every pass.
 - **Accuracy**: totals are exactly the sum of the underlying `usage` records; the panel never estimates. Session
   rows follow the selected range, their sum over any day equals that day's heatmap figure exactly, and the
   hourly cost is rolled into the day, model, and session dimensions, whose sums all equal the grand total.
@@ -290,7 +301,7 @@ Host/Origin fence (`ctx.connection.requestRejection`) and be `POST` with a JSON 
 | Method       | Body                | Purpose                                                         |
 | ------------ | ------------------- | --------------------------------------------------------------- |
 | `summary`    | `{}`                | Return the current snapshot, re-scanning only changed sessions. |
-| `summary`    | `{"refresh": true}` | Force a full re-decode of every session.                        |
+| `summary`    | `{"refresh": true}` | Distrust this plugin's folds and rebuild them, still seeding from any Host projection row that proves itself. |
 | `refresh`    | `{}`                | Alias for a forced refresh.                                     |
 | `config`     | `{}`                | Return the live config, its field list, and editability. `models` carries the Host's live model catalog (each entry with its context window). |
 | `saveConfig` | `{"value": {...}}`  | Validate and persist a config; returns it with the field list. Automatic compaction runs in this plugin and writes no platform config, so there is no "did the mirror land" field. |
@@ -376,7 +387,9 @@ lib/schema.js       Config schema, default price sheet, field descriptions
 lib/billing.js      Peak rules, pricing, legacy-config migrations
 lib/holidays.js     Network fetch, per-year cache, built-in seed
 lib/contextops.js   Surface replacement for clear / compact, the real three-part measurement, and segmentation
-lib/store.js        Revision-keyed cache and the snapshot (per day / per model)
+lib/store.js        Revision-keyed cache, the frame-level scan, and the snapshot (per day / per model)
+lib/frames.js       Walking a stored log's Zstandard frames to decode only what is new
+lib/projection.js   The tokenPanoramaUsage projection unit the Host keeps current
 lib/http.js         Request body reading and JSON responses
 client.js           Client half: panel, heatmap, trend chart, session tree, workspaces, export
 locale/en.json      plugin metadata (English)

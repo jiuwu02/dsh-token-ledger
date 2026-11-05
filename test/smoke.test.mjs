@@ -10,14 +10,28 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 // Plugin state redirects into a throwaway directory before any module
 // touches storageDirOf.
-process.env.DSH_HOME = mkdtempSync(join(tmpdir(), "dsh-token-panorama-test-"));
+// A sandbox may refuse the platform temp directory, so the scratch root falls
+// back to one inside the repository (gitignored).
+const scratch = (() => {
+  try {
+    return mkdtempSync(join(tmpdir(), "dsh-token-panorama-test-"));
+  } catch {
+    const local = join(
+      dirname(dirname(fileURLToPath(import.meta.url))),
+      ".tmp-test",
+    );
+    mkdirSync(local, { recursive: true });
+    return mkdtempSync(join(local, "smoke-"));
+  }
+})();
+process.env.DSH_HOME = scratch;
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 // file:// URLs, because a Windows absolute path is not a supported ESM

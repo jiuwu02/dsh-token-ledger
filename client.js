@@ -28,6 +28,177 @@ window.__ModuleLoader__.load({
     const subscribeNoop = () => () => {};
     const snapshotNoop = () => undefined;
 
+    /**
+     * Per-session prompt-optimizer state, kept OUTSIDE React.
+     *
+     * Switching session windows unmounts the composer slots, so useState
+     * state is lost mid-flight: the composer block was lifted, the busy flag
+     * vanished and the completed rewrite lost its revert affordance. All of
+     * that state lives here instead, addressed by session id — one window's
+     * "busy"/"optimized" state can never be observed by (or applied to) a
+     * different session's composer.
+     *
+     *   busy          - an optimization request is in flight for this session
+     *   optimizedText - the exact draft this session's last rewrite produced
+     *   revertText    - the exact draft that rewrite replaced
+     *   error         - the last failure note, or null
+     *
+     * The "optimized" phase is derived rather than stored: it holds only while
+     * the live draft is still verbatim optimizedText. An edit therefore hides
+     * revert and re-lights the optimize button with no effect or DOM poking.
+     */
+    const optimizerStates = new Map();
+    const optimizerListeners = new Map();
+    /** One active run per session; a stale completion cannot overwrite it. */
+    const optimizerClaims = new Map();
+    let optimizerClaimSeq = 0;
+    const nextOptimizerClaim = () => ++optimizerClaimSeq;
+
+    /** Read (or lazily create) the state object for one session. */
+    function optimizerStateFor(sessionId) {
+      let state = optimizerStates.get(sessionId);
+      if (state === undefined) {
+        state = { busy: false, error: null, optimizedText: "", revertText: "" };
+        optimizerStates.set(sessionId, state);
+      }
+      return state;
+    }
+
+    /** Merge a patch into one session's state and notify its subscribers. */
+    function setOptimizerState(sessionId, patch) {
+      const next = { ...optimizerStateFor(sessionId), ...patch };
+      optimizerStates.set(sessionId, next);
+      const listeners = optimizerListeners.get(sessionId);
+      if (listeners !== undefined) for (const listener of listeners) listener();
+      return next;
+    }
+
+    /** Subscribe one component to one session's state changes. */
+    function subscribeOptimizer(sessionId, listener) {
+      let set = optimizerListeners.get(sessionId);
+      if (set === undefined) {
+        set = new Set();
+        optimizerListeners.set(sessionId, set);
+      }
+      set.add(listener);
+      return () => {
+        set.delete(listener);
+        if (set.size === 0) optimizerListeners.delete(sessionId);
+      };
+    }
+
+    /** Shared hook: both composer slots read the same per-session state. */
+    function useOptimizerState(sessionId) {
+      const subscribe = useCallback(
+        (listener) =>
+          typeof sessionId === "string" && sessionId !== ""
+            ? subscribeOptimizer(sessionId, listener)
+            : () => {},
+        [sessionId],
+      );
+      const getSnapshot = useCallback(() => optimizerStateFor(sessionId), [sessionId]);
+      return useSyncExternalStore(subscribe, getSnapshot);
+    }
+
+    /**
+     * Model-route inheritance for a brand-new session.
+     *
+     * A fresh session has no `request/header` and no `model/selection` event,
+     * so the Host's own route lookup has nothing to inherit. The platform does
+     * not copy the creating window's selected model into the new session, so
+     * the Client remembers the model selection it last saw on a rendered
+     * composer — that is the current window's selected model at the moment the
+     * new window was opened — and offers it to the optimizer as a route hint.
+     *
+     * Keyed by session id, so one window's selection can never be mistaken for
+     * another's; the module-level fallback is only consulted for a session
+     * that has not selected a model yet (a new window). The last observation is
+     * ALSO mirrored into localStorage: a new browser window re-instantiates
+     * this client module, so module-level state alone would not survive the
+     * very switch the hint exists for.
+     */
+    const MODEL_PREF_KEY = "optimizerModelHint";
+    const observedModels = new Map();
+    let lastObservedModel = null;
+    // Lazy on purpose: readPref uses PREF_PREFIX, a const declared further
+    // down in this module factory. Calling it during module evaluation would
+    // hit the temporal dead zone. The first real render/click is well after.
+    let modelHintLoaded = false;
+    function loadModelHint() {
+      if (modelHintLoaded) return;
+      modelHintLoaded = true;
+      try {
+        const stored = readPref(MODEL_PREF_KEY, null);
+        if (
+          stored !== null &&
+          typeof stored?.provider === "string" &&
+          stored.provider !== "" &&
+          typeof stored?.model === "string" &&
+          stored.model !== ""
+        )
+          lastObservedModel = { provider: stored.provider, model: stored.model };
+      } catch {
+        /* storage may be blocked; the in-memory hint still works */
+      }
+    }
+
+    /** Read the wire-visible modelSelection view for one session. */
+    function modelSelectionOf(sessions, sessionId) {
+      try {
+        const session = sessions?.binding?.(sessionId)?.session;
+        const value = session?.projections
+          ?.faceOf?.("modelSelection")
+          ?.getSnapshot?.();
+        const selection = value?.next ?? value?.lastUsed;
+        if (
+          selection !== null &&
+          selection !== undefined &&
+          typeof selection.provider === "string" &&
+          selection.provider !== "" &&
+          typeof selection.model === "string" &&
+          selection.model !== ""
+        )
+          return { provider: selection.provider, model: selection.model };
+      } catch {
+        /* a released scope simply has no selection yet */
+      }
+      return null;
+    }
+
+    /** Remember a selection whenever a session composer is rendered. */
+    function observeModelSelection(sessions, sessionId) {
+      loadModelHint();
+      const selection = modelSelectionOf(sessions, sessionId);
+      if (selection === null) return;
+      observedModels.set(sessionId, selection);
+      if (
+        lastObservedModel === null ||
+        lastObservedModel.provider !== selection.provider ||
+        lastObservedModel.model !== selection.model
+      ) {
+        lastObservedModel = selection;
+        try {
+          writePref(MODEL_PREF_KEY, selection);
+        } catch {
+          /* storage may be unavailable; the in-memory hint still works */
+        }
+      }
+    }
+
+    /** Route hint for one optimize call; null lets the Host inherit its own. */
+    function optimizerRoute(sessions, sessionId) {
+      loadModelHint();
+      const own = modelSelectionOf(sessions, sessionId);
+      if (own !== null) {
+        observeModelSelection(sessions, sessionId);
+        return own;
+      }
+      // A new session has no selection yet: inherit the model the creating
+      // (current) window was using when this window was opened.
+      if (lastObservedModel !== null) return lastObservedModel;
+      for (const selection of observedModels.values()) return selection;
+      return null;
+    }
     /** Panel identity, shared by the sidebar row and the main slot key. */
     const PANEL_ID = "dsh-token-panorama";
     /** Locale namespace owned by this plugin. */
@@ -44,8 +215,8 @@ window.__ModuleLoader__.load({
     //#region i18n
 
     const ZH = {
-      "nav.label": "Token 全景",
-      "page.title": "Token 全景",
+      "nav.label": "用量概览",
+      "page.title": "用量概览",
       "page.subtitle": "基于会话日志聚合，覆盖主会话与子代理。",
       "action.refresh": "刷新",
       "action.refreshing": "刷新中…",
@@ -319,10 +490,10 @@ window.__ModuleLoader__.load({
       "settings.restore.hint": "把上一次保存的配置写回；当前配置同样会存入快照",
       "settings.restored": "已恢复上一版配置。",
       "settings.clearCache": "清空解析缓存",
-      "settings.clearCache.hint": "下次打开全景时重新扫描全部会话日志",
+      "settings.clearCache.hint": "下次打开用量概览时重新扫描全部会话日志",
       "settings.cacheCleared": "缓存已清空。",
       "settings.budget.title": "预算告警",
-      "settings.budget.hint": "0 表示关闭；达到阈值时全景页顶部出现提醒。",
+      "settings.budget.hint": "0 表示关闭；达到阈值时用量概览顶部出现提醒。",
       "settings.budget.dailyTokens": "日 token 预算",
       "settings.budget.weeklyTokens": "周 token 预算",
       "settings.budget.dailyCost": "日费用预算",
@@ -1010,8 +1181,12 @@ window.__ModuleLoader__.load({
         post("token-stats/api/clearContext", { sessionId }),
       compactContext: (sessionId) =>
         post("token-stats/api/compactContext", { sessionId }),
-      optimizePrompt: (sessionId, text) =>
-        post("token-stats/api/optimizePrompt", { sessionId, text }),
+      optimizePrompt: (sessionId, text, route) =>
+        post("token-stats/api/optimizePrompt", {
+          sessionId,
+          text,
+          ...(route === null || route === undefined ? {} : { route }),
+        }),
       contextPressure: (sessionId) =>
         post("token-stats/api/contextPressure", { sessionId }),
       status: (sessionId) => post("token-stats/api/status", { sessionId }),
@@ -1197,6 +1372,9 @@ window.__ModuleLoader__.load({
 .dts-optBtn{pointer-events:auto;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border:none;border-radius:var(--dsw-radius-md);background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;line-height:16px;cursor:pointer;transition:background-color .12s,color .12s}
 .dts-optBtn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
 .dts-optBtn:disabled{opacity:.45;cursor:default}
+/* Completed rewrite: a distinctly greyed-out, obviously inert button. */
+.dts-optBtn.dts-optBtnDone{opacity:.4;cursor:default;color:var(--dsw-alias-label-tertiary)}
+.dts-optBtn.dts-optBtnDone:hover{background:transparent;color:var(--dsw-alias-label-tertiary)}
 .dts-optBtn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--dsw-alias-brand-primary)}
 .dts-optIcon{width:14px;height:14px;flex:none}
 .dts-optIcon svg{width:14px;height:14px;display:block;fill:currentColor}
@@ -1249,7 +1427,7 @@ window.__ModuleLoader__.load({
 .dts-presetBar{display:flex;flex-direction:column;gap:6px;padding:10px 0 14px;border-bottom:.5px solid var(--dsw-alias-border-l1)}
 .dts-presetRow{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .dts-presetRow .dts-select{width:auto;min-width:220px}
-.dts-optRevert{height:24px;padding:0 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:none;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;cursor:pointer}
+.dts-optRevert{box-sizing:border-box;height:28px;padding:0 8px;border:1px solid var(--dsw-alias-border-l2);border-radius:6px;background:none;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;cursor:pointer}
 .dts-optRevert:hover{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
 .dts-optRevert:disabled{opacity:.55;cursor:not-allowed}
 /* The cost card's rule line prints both bands; each half keeps the colour the
@@ -6460,10 +6638,14 @@ window.__ModuleLoader__.load({
       // scan plus a lock-file read, and the dock outlives any single turn.
       const [running, setRunning] = useState(false);
       const [locked, setLocked] = useState(false);
-      // The slot injects `t` through its locale namespace; the captured bind
-      // is only a fallback for a render path that does not carry it.
+      // The prompt optimizer keeps its state in a per-session store outside
+      // React, so a switch to another window and back cannot lift this
+      // session's "optimizing" block. Reading it here keeps the two dock
+      // buttons inert for the whole run, in this session only.
+      const optimizerBusy = useOptimizerState(sessionId).busy === true;
+      // The slot injects `t` through its locale namespace; the captured
+      // bind is only a fallback for a render path that does not carry it.
       const t = translate ?? boundT;
-
       useEffect(() => {
         if (typeof sessionId !== "string" || sessionId === "") return undefined;
         let alive = true;
@@ -6520,7 +6702,7 @@ window.__ModuleLoader__.load({
             {
               type: "button",
               className: "dts-ctxBtn dts-ctxClear",
-              disabled: busy !== null || running || locked,
+              disabled: busy !== null || running || locked || optimizerBusy,
               onClick: () => run("clear"),
               title: running
                 ? t("context.clear.disabledRunning")
@@ -6535,7 +6717,7 @@ window.__ModuleLoader__.load({
             {
               type: "button",
               className: "dts-ctxBtn dts-ctxCompact",
-              disabled: busy !== null || locked,
+              disabled: busy !== null || locked || optimizerBusy,
               onClick: () => run("compact"),
               title: locked
                 ? t("context.disabledTask")
@@ -6562,8 +6744,15 @@ window.__ModuleLoader__.load({
      * queue dock resolves its conversation service; the overlay slot passes
      * no props of its own, so nothing here relies on hook injection.
      */
-    function OptimizeButton({ sessionId, input, blocks, t: translate }) {
+    function OptimizeButton({ sessionId, input, blocks, sessions, t: translate }) {
       const t = translate ?? boundT;
+      // Remember this window's model selection on every render. A newly opened
+      // window has no selection of its own, so its optimizer inherits the one
+      // the creating (last active) window was using.
+      useEffect(() => {
+        if (typeof sessionId === "string" && sessionId !== "")
+          observeModelSelection(sessions, sessionId);
+      });
       // The published InputState store: subscribe for re-renders, snapshot
       // for the value. A shell that has not published yet degrades to a
       // hidden button rather than a broken composer.
@@ -6576,82 +6765,108 @@ window.__ModuleLoader__.load({
           : input.state.getSnapshot.bind(input.state),
       );
       const draft = typeof snapshot?.draft === "string" ? snapshot.draft : "";
-      const [busy, setBusy] = useState(false);
-      const [error, setError] = useState(null);
-      // The texts the optimizer replaced, newest last: the revert button pops
-      // one and writes it back, so a chain of optimizations unwinds one step at
-      // a time. In state because the button's visibility follows the length,
-      // and a ref would not re-render. Programmatic `setDraft` merges into the
-      // editor history instead of pushing an undo step, which is exactly why
-      // Ctrl+Z cannot recover the original and this button must.
-      const [revertStack, setRevertStack] = useState([]);
-      // Mirrors `busy` for the unmount cleanup without re-registering it.
-      const runningRef = useRef(false);
-      useEffect(
-        () => () => {
-          // An optimization still in flight must not leave the composer
-          // blocked after this button unmounts; the rewrite still lands
-          // through the input store.
-          if (runningRef.current) {
-            try {
-              blocks?.set(sessionId, undefined);
-            } catch {
-              /* the session scope may already be gone */
-            }
-          }
-        },
-        [sessionId, blocks],
-      );
+      // All optimizer state is per-session and lives outside React, so a
+      // switch to another session window cannot lift this run.
+      const state = useOptimizerState(sessionId);
+      const busy = state.busy === true;
+      // The optimized phase is DERIVED, never stored as a flag: it holds only
+      // while the live draft is still exactly the text this session rewrote.
+      // Editing one character therefore hides revert and re-lights optimize.
+      const optimized =
+        state.optimizedText !== "" && draft === state.optimizedText;
+
       if (typeof sessionId !== "string" || sessionId === "") return null;
       // No shell, no button: writing the rewrite back would be impossible.
-      // The button itself stays resident — the user asked for a permanent
-      // affordance — and is merely disabled while the draft is empty, which
-      // keeps the hover explanation discoverable at all times.
       if (input === undefined) return null;
 
       const run = async () => {
-        if (busy || draft.trim() === "") return;
+        // Guard on the shared store, not on a local flag: a remount or a
+        // second window must not start a second optimization for this session.
+        if (
+          optimizerStateFor(sessionId).busy ||
+          optimized ||
+          draft.trim() === ""
+        )
+          return;
         const original = draft;
-        setBusy(true);
-        runningRef.current = true;
-        setError(null);
-        // The composer goes inert for the duration: Enter and the send button
-        // must not fire a message while the rewrite is in flight — a submit
-        // would send the un-rewritten text, and a keystroke would be silently
-        // overwritten when the rewrite lands. `blocks` is the platform's own
-        // registry for exactly this ("the one way another plugin stops a
-        // session's input"), and it renders the composer bar inert until the
-        // block is lifted.
+        // A monotonically increasing claim: only the request that still
+        // owns this session may write back or lift the composer block.
+        const claim = nextOptimizerClaim();
+        optimizerClaims.set(sessionId, claim);
+        setOptimizerState(sessionId, {
+          busy: true,
+          error: null,
+          optimizedText: "",
+          revertText: "",
+        });
+        // The composer goes inert for the whole run. The block is stored in
+        // the platform per-session registry, so switching windows away and
+        // back leaves input and send disabled until the run really ends.
         try {
           blocks?.set(sessionId, { reason: t("optimize.blocking") });
         } catch {
           /* an uncooperative scope must not fail the optimization itself */
         }
+        let text = "";
+        let failure = null;
         try {
-          const result = await api.optimizePrompt(sessionId, original);
-          const text = typeof result?.text === "string" ? result.text : "";
-          if (text !== "") {
-            setRevertStack((stack) => [...stack, original]);
-            input.actions.setDraft(text);
-          }
+          const route = optimizerRoute(sessions, sessionId);
+          const result = await api.optimizePrompt(sessionId, original, route);
+          text = typeof result?.text === "string" ? result.text : "";
         } catch (err) {
-          setError(err instanceof Error ? err.message : String(err));
-        } finally {
-          runningRef.current = false;
-          try {
-            blocks?.set(sessionId, undefined);
-          } catch {
-            /* the scope may be gone; the unmount path covers the rest */
+          failure = err instanceof Error ? err.message : String(err);
+        }
+        // Ownership guard 1: an aborted/superseded run must not write.
+        // (A new window reuses the same session id, so a claim alone is not
+        // enough — see the draft equality check below.)
+        if (optimizerClaims.get(sessionId) !== claim) return;
+        // Ownership guard 2: the rewrite belongs to THIS session and to the
+        // exact draft that was sent. The input face is that session resident
+        // shell, but a user may have edited or switched windows while the
+        // model ran; never clobber text that is no longer the sent draft, and
+        // never let a stale continuation become another session rewrite.
+        let landed = false;
+        if (text !== "" && failure === null) {
+          const current = input.state.getSnapshot();
+          const currentDraft =
+            typeof current?.draft === "string" ? current.draft : "";
+          if (currentDraft === original) {
+            input.actions.setDraft(text);
+            landed = true;
           }
-          setBusy(false);
+          setOptimizerState(sessionId, {
+            busy: false,
+            error: null,
+            optimizedText: landed ? text : "",
+            revertText: landed ? original : "",
+          });
+        } else {
+          setOptimizerState(sessionId, {
+            busy: false,
+            error: failure,
+            optimizedText: "",
+            revertText: "",
+          });
+        }
+        // Lift the block only when the run is truly over. Even if this
+        // component unmounted mid-flight, blocks is the root registry and the
+        // session key still addresses this session store.
+        try {
+          blocks?.set(sessionId, undefined);
+        } catch {
+          /* the scope may already be gone */
         }
       };
 
-      /** Put back the input this optimization replaced. */
+      /** Put back the exact input this session optimization replaced. */
       const revert = () => {
-        if (revertStack.length === 0) return;
-        const previous = revertStack[revertStack.length - 1];
-        setRevertStack((stack) => stack.slice(0, -1));
+        if (!optimized || busy) return;
+        const previous = state.revertText;
+        setOptimizerState(sessionId, {
+          optimizedText: "",
+          revertText: "",
+          error: null,
+        });
         input.actions.setDraft(previous);
       };
 
@@ -6665,8 +6880,10 @@ window.__ModuleLoader__.load({
             "button",
             {
               type: "button",
-              className: "dts-optBtn",
-              disabled: busy || draft.trim() === "",
+              className: "dts-optBtn" + (optimized ? " dts-optBtnDone" : ""),
+              // After a completed rewrite the button stays grey and inert:
+              // a second optimization is only possible after revert or edit.
+              disabled: busy || optimized || draft.trim() === "",
               onClick: run,
             },
             h("span", {
@@ -6675,12 +6892,8 @@ window.__ModuleLoader__.load({
             }),
             busy ? t("optimize.working") : t("optimize.button"),
           ),
-          // Only after a rewrite succeeded: the button is the visible promise
-          // that the previous text is recoverable, and an idle button that
-          // does nothing would be worse than none.
-          revertStack.length === 0
-            ? null
-            : h(
+          optimized
+            ? h(
                 "button",
                 {
                   type: "button",
@@ -6690,20 +6903,26 @@ window.__ModuleLoader__.load({
                   title: t("optimize.revert.hint"),
                 },
                 t("optimize.revert"),
-              ),
+              )
+            : null,
           h(
             "span",
             { className: "dts-optTip", role: "tooltip" },
             t("optimize.hint"),
           ),
         ),
-        error === null ? null : h("span", { className: "dts-optError" }, error),
+        state.error === null
+          ? null
+          : h("span", { className: "dts-optError" }, state.error),
       );
     }
 
     //#endregion
 
     return {
+      // "sessions" is intentionally NOT in the hard inject list: the
+      // model-selection hint uses ctx.get("sessions") opportunistically, and
+      // a profile without the service must still load the whole plugin.
       inject: ["slots", "locale"],
       apply(ctx) {
         ctx.effect(
@@ -6820,6 +7039,7 @@ window.__ModuleLoader__.load({
                         // the button can block this session's input while the
                         // optimizer runs and lift the block after.
                         blocks: conversation.blocks,
+                        sessions,
                       };
                     } catch {
                       return { sessionId, input: undefined };

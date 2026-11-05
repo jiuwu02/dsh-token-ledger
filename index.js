@@ -20,14 +20,16 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { count } from "./lib/time.js";
+import { count, hourKey } from "./lib/time.js";
 import { Config, CONFIG_FIELDS, PEAK_MODES } from "./lib/schema.js";
 import { billingRules, migrateCalendars } from "./lib/billing.js";
 import { HolidayStore } from "./lib/holidays.js";
 import { UsageIndex, storageDirOf } from "./lib/store.js";
+import { usageProjection } from "./lib/projection.js";
 import { readBody, writeJson } from "./lib/http.js";
 import { translatorFor } from "./lib/i18n.js";
 import { toolUsageSummary } from "./lib/ledger.js";
+import { installStatsReset } from "./lib/stats-reset.js";
 import { applyPricePreset, pricePresetCatalog } from "./lib/prices.js";
 import {
   agentForSession,
@@ -84,6 +86,15 @@ const AUTO_RETRY_MS = 60_000;
 export function apply(ctx, config) {
   const holidays = new HolidayStore(ctx);
   let rules = billingRules(config ?? {}, holidays.sets());
+
+  /**
+   * Re-publish the projection unit against the current rules.
+   *
+   * Replaced once the registry is available, and a no-op until then: a profile
+   * without the service behaves exactly as it did before the unit existed.
+   */
+  let syncProjection = () => {};
+
   const index = new UsageIndex(ctx, rules);
   /**
    * When each session last failed an automatic compaction, keyed on the session
@@ -117,7 +128,72 @@ export function apply(ctx, config) {
   const reprice = () => {
     rules = billingRules(config ?? {}, holidays.sets());
     index.rules = rules;
+    syncProjection();
   };
+
+  /**
+   * Contribute the usage fold to the Host's projection registry.
+   *
+   * The registry folds every committed session event once, while the events are
+   * still in memory, and a companion service persists those states to disk. A
+   * scan can then seed from a session's stored row instead of inflating its log,
+   * which is the difference between opening the panel and reading 230 MB of
+   * compressed history.
+   *
+   * The service is optional — a profile can drop it — so it is declared through
+   * `ctx.inject` rather than the plugin's own `inject` list: the callback runs
+   * when the service arrives and its fiber is disposed when the service goes,
+   * which also disposes the registration. Nothing here can keep the plugin from
+   * loading.
+   *
+   * The unit is replaced whenever the rules are rebuilt, because its hour
+   * buckets depend on the configured zone and a cell cannot be re-keyed: only a
+   * fresh `init` gives it the new zone. The state carries the zone it was folded
+   * in, so a reader that sees a mismatch folds from the log instead of billing
+   * one event into two clocks.
+   */
+  ctx.inject(["sessionProjections"], (inner) => {
+    const projections = inner.sessionProjections;
+    let registration;
+    // Zero the platform's 「会话统计」dialog when this session's context is
+    // cleared. The two whole-log folds live in a read-only bundled package, so
+    // their apply functions are wrapped in the live registry instead: the
+    // reset state is each unit's own schema-valid init(). The patch rides this
+    // same fiber and is undone when the service disappears.
+    const undoStatsReset = installStatsReset(projections, (message) =>
+      ctx.logger?.warn?.(`dsh-token-panorama: ${message}`),
+    );
+    syncProjection = () => {
+      const schema = projectionSchema();
+      // Without a schema the unit would checkpoint rows nobody can read back:
+      // `viewCheckpoint` serves only units that carry a wire view.
+      if (schema === undefined) return;
+      registration?.();
+      try {
+        registration = projections.register(
+          usageProjection({ timeZone: rules.timeZone, hourKey, schema }),
+        );
+      } catch (error) {
+        // A registry that refuses the unit — another copy already claimed the
+        // key at a different state version, say — must not stop the plugin: the
+        // panel reads logs exactly as it did before this unit existed.
+        registration = undefined;
+        ctx.logger?.warn?.(
+          `dsh-token-panorama: could not register the usage projection: ${String(error)}`,
+        );
+      }
+    };
+    syncProjection();
+    inner.effect(
+      () => () => {
+        undoStatsReset();
+        registration?.();
+        registration = undefined;
+        syncProjection = () => {};
+      },
+      "dsh-token-panorama: usage projection",
+    );
+  });
 
   /**
    * The four-digit years the usage corpus spans, plus the current one.
@@ -1019,8 +1095,44 @@ export function apply(ctx, config) {
                 });
                 return;
               }
+              // Route inheritance: configured optimizer settings win. When
+              // they are empty the Client's route hint (the model selected in
+              // the creating window for a brand-new session) is next; the
+              // session's own request header remains the final fallback in
+              // resolveRoute. A new session has no header, so without this
+              // hint the optimizer has no route at all.
+              const opts = optimizerOptions();
+              const hint = body.route;
+              const hinted =
+                hint !== null &&
+                typeof hint === "object" &&
+                typeof hint.provider === "string" &&
+                hint.provider !== "" &&
+                typeof hint.model === "string" &&
+                hint.model !== "";
+              // Last resort when the Client could not observe a selected model
+              // (a brand-new browser window with no prior render, say): the
+              // deployment default still gives the optimizer a real route, so
+              // an unset optimizer config can never make the button fail.
+              const fallback = ctx.get("agentDefaultModel", false)?.currentSelection?.();
+              const defaulted =
+                fallback !== null &&
+                typeof fallback === "object" &&
+                typeof fallback.provider === "string" &&
+                fallback.provider !== "" &&
+                typeof fallback.model === "string" &&
+                fallback.model !== "";
+              const inherited =
+                opts.provider === "" && opts.model === ""
+                  ? hinted
+                    ? { provider: hint.provider, model: hint.model }
+                    : defaulted
+                      ? { provider: fallback.provider, model: fallback.model }
+                      : {}
+                  : {};
               const text = await optimizePrompt(ctx, agent, {
-                ...optimizerOptions(),
+                ...opts,
+                ...inherited,
                 text: body.text,
               });
               writeJson(res, 200, { ok: true, value: { text } });
@@ -1215,3 +1327,44 @@ export function apply(ctx, config) {
 }
 
 //#endregion
+
+/**
+ * The schema the projection unit validates its rows with.
+ *
+ * The registry calls `.parse` on the state before serving it and on every
+ * change notification, so this has to be a real validator — schemastery, which
+ * the config uses, has no `.parse` and is not one. Zod is resolved through the
+ * profile the same way `lib/schema.js` resolves schemastery, because a linked
+ * plugin has no `node_modules` of its own.
+ *
+ * The schema is deliberately shallow. Its job is to prove the served value is
+ * the shape a slot row table has, not to be the fold's own validator: a damaged
+ * row is dropped by `slotsOf` when the fold reads it back, which is the one
+ * place that has to agree with what a fresh fold would produce.
+ * @returns the schema, or undefined when this profile cannot supply zod.
+ */
+function projectionSchema() {
+  const base = process.env.DSH_PROFILE_DIR;
+  const probes = [];
+  if (typeof base === "string" && base !== "")
+    probes.push(join(base, "package.json"));
+  probes.push(join(process.cwd(), "package.json"));
+  for (const probe of probes) {
+    let lib;
+    try {
+      lib = createRequire(probe)("zod");
+    } catch {
+      continue;
+    }
+    const z = lib?.z ?? lib;
+    if (typeof z?.object !== "function") continue;
+    return z
+      .object({
+        zone: z.string(),
+        title: z.string(),
+        rows: z.array(z.array(z.union([z.string(), z.number()]))),
+      })
+      .strict();
+  }
+  return undefined;
+}

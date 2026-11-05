@@ -14,7 +14,7 @@
   ],
   "license": "MIT",
   "scripts": {
-    "test": "node test/i18n.test.mjs && node test/smoke.test.mjs"
+    "test": "node test/i18n.test.mjs && node test/smoke.test.mjs && node test/scan.test.mjs && node test/stats-reset.test.mjs"
   },
   "repository": {
     "type": "git",
