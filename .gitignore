@@ -10,3 +10,4 @@ plain-tmp/
 .tmp-asar/
 .tmp-test/
 .mnemon/
+.npm-cache-local/

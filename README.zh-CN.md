@@ -53,6 +53,23 @@ plugin_manager install_bundle target="<本目录的绝对路径>"
 
 卸载：在「插件」页面卸载 `dsh-token-panorama` 即可。
 
+## npm 包与下载量口径
+
+本插件同时发布到公共 npm registry，包名 `dsh-token-panorama`。目录站（awesome-dsh-plugin）与
+应用内市场可据此按包名安装并显示下载量；未发布到 npm 时才回退到 GitHub Release 的 tgz 附件。
+
+- 发布新版本：`npm publish --access public`。npm 要求开启两步验证，或使用勾选了 Bypass 2FA
+  的 granular access token。
+- 目录站会读取仓库 `package.json` 的 `name`，在 registry 上确认同名包，并要求该 npm 包的
+  `repository` 字段回指本 GitHub 仓库。这层映射自动从 registry 抓取，条目里无需、也不允许
+  手写 `npm:` 字段。
+- 市场显示的「下载量」是 npm 近 30 天（UTC 滚动窗口）下载数，来自
+  `api.npmjs.org/downloads/point`，由目录站每天夜间探测刷新。它不是「查看量 / 浏览量」：
+  目录与市场都不提供任何访问量字段。GitHub Release 附件的下载次数是另一套独立计数，
+  不会进入这个字段。
+- 每次修改都会迭代 `package.json` 的 `version`，并发布新版本，使 registry 的 `latest`
+  与目录里的 `version` 保持一致。
+
 ## 使用
 
 1. 在侧边栏点击 **Token 统计**。

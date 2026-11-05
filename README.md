@@ -62,6 +62,24 @@ After installation the sidebar shows a **Token Panorama** entry; selecting it op
 
 To remove it, uninstall the `dsh-token-panorama` bundle from the Plugins page.
 
+## npm package
+
+The plugin is also published to the public npm registry as `dsh-token-panorama`. Storefronts
+(the awesome-dsh-plugin catalog and the in-app market) can then install it by package name
+and show a download figure, instead of falling back to the GitHub Release tarball.
+
+- Publish a new version with `npm publish --access public`. npm requires either two-factor
+  authentication or a granular access token with Bypass 2FA enabled.
+- The catalog reads the `name` field of the repository `package.json`, confirms that package on
+  the registry, and requires the npm package `repository` field to point back at this GitHub
+  repo. The mapping is discovered automatically; no field needs to be added to any listing.
+- The download figure is the npm download count over a rolling 30-day UTC window
+  (`api.npmjs.org/downloads/point`), refreshed by the catalog nightly probe. It is not a
+  page-view or visit count: neither the catalog nor the market exposes any view metric.
+  GitHub Release asset downloads are a separate number and do not feed this field.
+- Every change bumps `version` in `package.json`; publish that version too, so the registry
+  `latest` tag and the catalog `version` stay in step.
+
 ## Usage
 
 1. Select **Token Panorama** in the sidebar.

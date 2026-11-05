@@ -1,7 +1,6 @@
 {
   "name": "dsh-token-panorama",
-  "version": "1.0.0",
-  "private": true,
+  "version": "1.0.1",
   "type": "module",
   "description": "Token panorama for DSH: totals, cache hit rate, peak/off-peak cost, calendar heatmap, session tree, workspaces, CSV/JSON export, plus context clear/compact actions and prompt optimization.",
   "keywords": [
@@ -13,6 +12,9 @@
     "billing"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "test": "node test/i18n.test.mjs && node test/smoke.test.mjs && node test/scan.test.mjs && node test/stats-reset.test.mjs"
   },
