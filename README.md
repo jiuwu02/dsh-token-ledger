@@ -42,6 +42,9 @@ third-party dependency is required.
   optimizer model and pastes the rewrite back into the composer; attachments are untouched. The request can
   also carry an excerpt of the session's context, so a prompt that says "this function" rewrites into one that
   names it. Instruction, route and the context toggle live on the **Prompt optimization** settings tab.
+- **Auto answers**: answers an `ask_user_question` batch on your behalf so runs do not stall while you are
+  away. Off by default; permission approvals, credentials, irreversible actions, payment and publishing are
+  never answered. Instruction, route and wait limit live on the **Auto answers** settings tab.
 - **Bilingual**: Chinese and English follow the platform locale.
 
 ## Requirements
@@ -223,8 +226,8 @@ The same tab carries three more things about how much window is left:
 - The **automatic compaction** switch and its **trigger threshold** (75% by default) decide when this plugin
   compacts on its own, before the window is full. The trigger rides the same `agent/pre-step` event the platform
   engine uses, but this plugin runs it and writes no platform config. A profile may disable that engine outright
-  (billion-context disables `dsh-compaction-basic` as a whole, and a preset's nested row is not reachable
-  through the config editor anyway), and then a saved switch would enforce nothing. The decision is made on the
+  (`dsh-compaction-basic` can be gated off as a whole, and a preset's nested row is not reachable through the
+  config editor anyway), and then a saved switch would enforce nothing. The decision is made on the
   three-part real total described above, not the usage-anchored figure the platform panel prints at the top: on
   a long session that one reads 112K while the same request really carries 2.3M. Two compactions of one
   session are at least a minute apart, so a history still over the threshold right after being summarized does
@@ -240,12 +243,55 @@ The same tab carries three more things about how much window is left:
   progress, and the omitted middle is marked explicitly. A span that reaches into the running turn is no
   different: the summarizer is handed the messages themselves, so the summary covers exactly what the
   checkpoint will replace.
+- A summary cut off by the output limit is retried, not accepted. A truncated checkpoint would replace real
+  history with a summary that stops mid-sentence, so the first attempt asks for exactly what the session
+  already sends, and each retry doubles the output budget towards 64,000 tokens — the platform's own output
+  reservation — leaving the history, the prompt and the model untouched. Only `max-tokens` is retried; an
+  adapter failure surfaces on the first attempt instead of paying for the same error twice. If every rung is
+  cut off the compaction is abandoned with the truncation named, and nothing half-written replaces the history.
 - The compaction lock is opened before the summarizer is called, not after. A second request then answers
   "already in flight" instead of paying for the same summary twice, and the platform's own engine backs off
   rather than racing this one.
 
 Clearing an already-cleared session is a no-op that reports success: rewriting one placeholder with another
 identical one is not an error.
+
+### Auto answers
+
+A model that needs a decision calls `ask_user_question` and stops until someone answers. This plugin can answer
+that batch on your behalf so a run does not stall while you are away. It is **off by default**: with the switch
+down the plugin delegates every batch unchanged and questions reach you exactly as they did before.
+
+The mechanism is the platform's own. Questions are asked through a cordis waterfall on
+`user-questions/request`, and any listener may answer — the first one that returns a batch wins. The plugin
+registers one such listener with `prepend`, so it is consulted before the Client's own answerer puts a card on
+screen (behind that answerer an automatic answer could never land). Answering is one direct `llm.stream` call
+with the batch and the instruction, and no tools are passed: the model can only return text.
+
+Every outcome that is not a confident answer hands the batch back down the chain: the switch off, a batch in a
+forbidden zone, no routable model, an answer that does not parse, a label the question never offered, a failed
+call, the wait limit. The question then reaches you as usual, so a defect here costs a slower card and never a
+lost question.
+
+**Never answered, whatever the switch says**: permission and approval prompts, plan reviews (any batch carrying
+an `intent`), credentials and keys, api keys and one-time codes, deletion and anything irreversible, payment and
+purchases, publishing and deployment. The check is a blunt keyword match over the question text and every option
+label, deliberately over-eager: a false positive costs one card you read, a false negative has a model deciding
+something it must never decide.
+
+The **Auto answers** settings tab holds the switch, the instruction the answering model reads, its provider and
+model (empty inherits the session's), and the wait limit. The limit is measured in seconds on the same scale
+`ask_user_question` uses: `-1` waits with no limit, anything else must be a whole number from 1 to 2147483. That
+range is the platform's own, so a value the tool would reject cannot be saved here either.
+
+Answers are marked where you see them: the model's answer carries a trailing note naming the model that gave it
+(`answered by <provider>/<model>`), inside the answer text itself, because the question service only carries
+`{id, selected, custom}` and drops anything else. The spend is recorded in the tool ledger under `ask-answer`
+and shown on the token overview as "answered N", beside compaction and optimization.
+
+Answers are never written into the transcript either: the question card shows what was answered, and the next
+turn's content is the model's own, so nothing an automatic answer decided can leak into a later summary as if
+you had said it.
 
 ### Validation
 
@@ -405,6 +451,7 @@ lib/schema.js       Config schema, default price sheet, field descriptions
 lib/billing.js      Peak rules, pricing, legacy-config migrations
 lib/holidays.js     Network fetch, per-year cache, built-in seed
 lib/contextops.js   Surface replacement for clear / compact, the real three-part measurement, and segmentation
+lib/ask.js          The question answerer: forbidden-zone screen, answer validation, the answering model call
 lib/store.js        Revision-keyed cache, the frame-level scan, and the snapshot (per day / per model)
 lib/frames.js       Walking a stored log's Zstandard frames to decode only what is new
 lib/projection.js   The tokenPanoramaUsage projection unit the Host keeps current

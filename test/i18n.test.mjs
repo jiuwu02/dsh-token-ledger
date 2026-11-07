@@ -111,7 +111,7 @@ assertAligned("lib/i18n.js", serverZh, serverEn);
 // here as a boundary check.
 for (const key of serverZh.keys()) {
   assert.ok(
-    /^(api|error|report|command|schema|optimizer|prompt)\./.test(key),
+    /^(api|error|report|command|schema|optimizer|prompt|ask)\./.test(key),
     `lib/i18n.js: "${key}" looks like a client key`,
   );
 }

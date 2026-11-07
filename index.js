@@ -31,6 +31,7 @@ import { translatorFor } from "./lib/i18n.js";
 import { toolUsageSummary } from "./lib/ledger.js";
 import { installStatsReset } from "./lib/stats-reset.js";
 import { applyPricePreset, pricePresetCatalog } from "./lib/prices.js";
+import { answerQuestions, shouldDefer } from "./lib/ask.js";
 import {
   agentForSession,
   clearContext,
@@ -299,12 +300,12 @@ export function apply(ctx, config) {
    * Compact this session if its real context total has reached the threshold.
    *
    * The trigger lives here rather than in the platform's own engine because a
-   * profile is free to disable that engine, and this one does: billion-context
-   * gates `dsh-compaction-basic` off at config level, and its row sits inside an
-   * agent preset where the config editor cannot reach it. A switch that only
-   * wrote `auto` there saved a value nothing read. Owning the trigger is what
-   * makes the setting do something on this profile, and on any profile that
-   * mounts a different engine or none at all.
+   * profile is free to disable that engine: `dsh-compaction-basic` can be gated
+   * off at config level, and its row may sit inside an agent preset where the
+   * config editor cannot reach it. A switch that only wrote `auto` there saved a
+   * value nothing read. Owning the trigger is what makes the setting do
+   * something on this profile, and on any profile that mounts a different
+   * engine or none at all.
    *
    * Four conditions must hold, and each one is a reason a compaction would
    * otherwise fail or duplicate work:
@@ -405,6 +406,49 @@ export function apply(ctx, config) {
       }
       return typeof next === "function" ? next() : undefined;
     });
+  };
+
+  /**
+   * Register the answerer that can answer a question batch on the user's behalf.
+   *
+   * The platform asks through a cordis waterfall, so any listener on
+   * `user-questions/request` may answer and the first one that returns a batch
+   * wins. `prepend` is what makes this default-off feature possible at all:
+   * without it the Client's own answerer runs first, the human card is already
+   * on screen, and an automatic answer could never land.
+   *
+   * Delegating is the default outcome, not the exception. Every path that is
+   * not a confident automatic answer calls `next()`: the switch being off, a
+   * batch inside a forbidden zone, a route this profile cannot resolve, an
+   * empty or malformed model answer, a failed call, a timeout. The question
+   * then continues down the chain exactly as it did before this listener
+   * existed, so a bug here costs a slower card, never a lost question.
+   *
+   * The route's `signal` is forwarded, and the wait budget is composed with it
+   * through `AbortSignal.any`, so an aborted turn and an expired budget both end
+   * the same way — the batch goes back to the human.
+   */
+  const registerAnswerer = () => {
+    if (typeof ctx.on !== "function") return;
+    ctx.on(
+      "user-questions/request",
+      async (request, next) => {
+        const options = askOptions();
+        try {
+          if (!options.enabled) return next();
+          if (shouldDefer(request)) return next();
+          const answer = await answerQuestions(ctx, request, options);
+          if (answer === null) return next();
+          return answer;
+        } catch (error) {
+          ctx.logger?.warn?.(
+            `dsh-token-panorama: automatic answer declined: ${String(error)}`,
+          );
+          return next();
+        }
+      },
+      { prepend: true },
+    );
   };
 
   /**
@@ -646,6 +690,13 @@ export function apply(ctx, config) {
         optimizerProvider: config?.optimizerProvider ?? "",
         optimizerModel: config?.optimizerModel ?? "",
         optimizerUseContext: config?.optimizerUseContext === true,
+        // Same story again: these are read raw so the modal shows what the
+        // answerer will actually use on the next question.
+        askAutoAnswer: config?.askAutoAnswer === true,
+        askPrompt: config?.askPrompt ?? "",
+        askProvider: config?.askProvider ?? "",
+        askModel: config?.askModel ?? "",
+        askTimeout: config?.askTimeout ?? 120,
         // The budget block is compared against the panorama's own sums in the
         // Client, so it travels with the config it was written with.
         budget: {
@@ -733,6 +784,23 @@ export function apply(ctx, config) {
     provider: config?.optimizerProvider ?? "",
     model: config?.optimizerModel ?? "",
     useContext: config?.optimizerUseContext === true,
+  });
+
+  /**
+   * The answering knobs the question answerer reads.
+   *
+   * Read per request for the same reason as {@link compactOptions}: the switch
+   * and the route must be the ones the modal last saved, not the ones this
+   * instance booted with, and the listener is registered once for its lifetime.
+   * @returns whether answering is on, the instruction, the route override and
+   *   the wait budget in seconds (-1 for no limit).
+   */
+  const askOptions = () => ({
+    enabled: config?.askAutoAnswer === true,
+    prompt: config?.askPrompt ?? "",
+    provider: config?.askProvider ?? "",
+    model: config?.askModel ?? "",
+    timeout: Number.isInteger(config?.askTimeout) ? config.askTimeout : 120,
   });
 
   /**
@@ -891,6 +959,7 @@ export function apply(ctx, config) {
   };
 
   registerAutoCompaction();
+  registerAnswerer();
 
   // Both commands share one shape: resolve the agent from the invocation, run
   // the operation, and answer in the transcript. `definitionId` is omitted

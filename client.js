@@ -250,6 +250,7 @@ window.__ModuleLoader__.load({
       "settings.tab.general": "通用",
       "settings.tab.context": "上下文",
       "settings.tab.optimizer": "提示词优化",
+      "settings.tab.ask": "问答功能",
       "context.clear": "清空上下文",
       "context.clear.hint":
         "把当前会话的全部历史替换为一条占位记录（会话与日志完整保留）。需要会话空闲，运行中点击会被拒绝。",
@@ -363,6 +364,23 @@ window.__ModuleLoader__.load({
       "settings.field.optimizerUseContext": "根据上下文优化提示词",
       "settings.fieldDesc.optimizerUseContext":
         "开启后，请求会附带当前会话上下文的摘录，改写会贴合正在进行的任务；摘录随每次点击发送，额外消耗 token。",
+      "settings.field.askAutoAnswer": "自动代答提问",
+      "settings.field.askPrompt": "代答指令",
+      "settings.field.askProvider": "代答模型 Provider",
+      "settings.field.askModel": "代答模型",
+      "settings.field.askTimeout": "等待上限（秒）",
+      "settings.fieldDesc.askAutoAnswer":
+        "开启后，模型用 ask_user_question 提问时由代答模型先作答，省去你逐条点选；关闭时代答完全不介入，提问照旧弹给你。",
+      "settings.fieldDesc.askPrompt":
+        "代答模型读到的指令，随后附上本轮的全部问题与选项。指令里写清什么该答、什么必须留给你。",
+      "settings.fieldDesc.askProvider": "留空则沿用当前会话的 provider。",
+      "settings.fieldDesc.askModel": "留空则沿用当前会话的模型。",
+      "settings.fieldDesc.askTimeout":
+        "代答模型超过这个秒数还没答完，问题就原样回到你手上；填 -1 表示不限时一直等。",
+      "settings.askTimeoutHint":
+        "与平台 ask_user_question 的口径一致：-1 或 1 到 2147483 之间的整数秒。",
+      "settings.ask.guard":
+        "涉及权限审批、凭据密钥、不可逆删除、付费与发布的提问，无论开关如何都只留给你，插件不会代答。",
       "settings.placeholder.inherit": "继承会话设置",
       "settings.fieldEmpty": "未设置",
       "range.label": "时间范围",
@@ -469,7 +487,7 @@ window.__ModuleLoader__.load({
       "summary.stale": "正在后台刷新，先显示上一次的结果。",
       "stat.tool": "工具自耗",
       "stat.tool.hint": "{calls} 次调用（{estimated} 次为估算）",
-      "stat.tool.mix": "压缩 {compact} · 优化 {optimize} · 清空 {clear} 次",
+      "stat.tool.mix": "压缩 {compact} · 优化 {optimize} · 代答 {answer} · 清空 {clear} 次",
       "stat.compactROI": "压缩盈亏",
       "stat.compactROI.hint": "压缩花费 {cost}，省下 {saved} tokens",
       "stat.compactROI.none": "尚无压缩记录",
@@ -552,6 +570,7 @@ window.__ModuleLoader__.load({
       "settings.tab.general": "General",
       "settings.tab.context": "Context",
       "settings.tab.optimizer": "Prompt optimization",
+      "settings.tab.ask": "Auto answers",
       "context.clear": "Clear context",
       "context.clear.hint":
         "Replace the whole session history with one placeholder record (session and log stay intact). The session must be idle; a click mid-turn is refused.",
@@ -671,6 +690,23 @@ window.__ModuleLoader__.load({
       "settings.field.optimizerUseContext": "Optimize with context",
       "settings.fieldDesc.optimizerUseContext":
         "When on, the request carries an excerpt of the current session's context so the rewrite fits the ongoing task; the excerpt is sent on every click and costs extra tokens.",
+      "settings.field.askAutoAnswer": "Answer asks automatically",
+      "settings.field.askPrompt": "Answering instruction",
+      "settings.field.askProvider": "Answering model provider",
+      "settings.field.askModel": "Answering model",
+      "settings.field.askTimeout": "Wait limit (seconds)",
+      "settings.fieldDesc.askAutoAnswer":
+        "When on, a model's ask_user_question batch is answered by the answering model first, so you are not asked to click through each question; when off, answering never intervenes and every question reaches you as before.",
+      "settings.fieldDesc.askPrompt":
+        "The instruction the answering model reads, followed by this batch's questions and options. Say in it what may be answered and what must always stay with you.",
+      "settings.fieldDesc.askProvider": "Empty inherits the session's provider.",
+      "settings.fieldDesc.askModel": "Empty inherits the session's model.",
+      "settings.fieldDesc.askTimeout":
+        "If the answering model has not finished within this many seconds the batch goes back to you unchanged; -1 waits with no limit.",
+      "settings.askTimeoutHint":
+        "The same scale ask_user_question uses: -1, or a whole number of seconds from 1 to 2147483.",
+      "settings.ask.guard":
+        "Questions about permission approvals, credentials and keys, irreversible deletion, payment and publishing always stay with you, whatever this switch says. The plugin will not answer them.",
       "settings.placeholder.inherit": "inherit from the session",
       "settings.fieldEmpty": "not set",
       "range.label": "Range",
@@ -779,7 +815,7 @@ window.__ModuleLoader__.load({
       "summary.stale": "Refreshing in the background; showing the last result.",
       "stat.tool": "Tool self-consumption",
       "stat.tool.hint": "{calls} calls ({estimated} estimated)",
-      "stat.tool.mix": "compact {compact} · optimize {optimize} · clear {clear}×",
+      "stat.tool.mix": "compact {compact} · optimize {optimize} · answered {answer} · clear {clear}×",
       "stat.compactROI": "Compaction ROI",
       "stat.compactROI.hint": "compaction cost {cost}, saved {saved} tokens",
       "stat.compactROI.none": "no compaction yet",
@@ -2569,6 +2605,7 @@ window.__ModuleLoader__.load({
         ["holidays", "settings.tab.holidays"],
         ["context", "settings.tab.context"],
         ["optimizer", "settings.tab.optimizer"],
+        ["ask", "settings.tab.ask"],
         ["general", "settings.tab.general"],
       ];
 
@@ -2726,6 +2763,16 @@ window.__ModuleLoader__.load({
                     : null,
                   section === "optimizer"
                     ? h(OptimizerTab, {
+                        draft,
+                        doc,
+                        editable,
+                        t,
+                        onPatch: (patch) =>
+                          setDraft((current) => ({ ...current, ...patch })),
+                      })
+                    : null,
+                  section === "ask"
+                    ? h(AskTab, {
                         draft,
                         doc,
                         editable,
@@ -4088,6 +4135,235 @@ window.__ModuleLoader__.load({
               t,
             }),
           ),
+        ),
+      );
+    }
+
+    /**
+     * The answering tab: whether a batch is answered at all, the instruction
+     * the answering model reads, the route it runs on, and how long it may
+     * take.
+     *
+     * Same shape as the other two "we send this to a model for you" tabs —
+     * prompt textarea, provider/model grid, then a limit — because the three
+     * read the same way and share one risk: what the plugin puts on the wire
+     * without the user watching. The switch comes first here rather than after
+     * the grid, because unlike the other two features this one answers in the
+     * user's name instead of in a panel they review, and the guard note below
+     * it is what keeps the choice honest.
+     */
+    function AskTab({ draft, doc, editable, t, onPatch }) {
+      const fallback = doc?.value ?? {};
+      const enabled =
+        typeof draft.askAutoAnswer === "boolean"
+          ? draft.askAutoAnswer
+          : (fallback.askAutoAnswer ?? false);
+      const prompt =
+        typeof draft.askPrompt === "string"
+          ? draft.askPrompt
+          : (fallback.askPrompt ?? "");
+      const provider =
+        typeof draft.askProvider === "string"
+          ? draft.askProvider
+          : (fallback.askProvider ?? "");
+      const model =
+        typeof draft.askModel === "string"
+          ? draft.askModel
+          : (fallback.askModel ?? "");
+      const timeout =
+        typeof draft.askTimeout === "number"
+          ? draft.askTimeout
+          : (fallback.askTimeout ?? 120);
+      const groups = Array.isArray(doc?.models?.groups)
+        ? doc.models.groups
+        : [];
+      const providerOptions = useMemo(() => {
+        const rows = groups.map((group) => ({
+          value: group.id,
+          label: group.name ?? group.id,
+        }));
+        return [
+          { value: "", label: t("settings.placeholder.inherit") },
+          ...rows,
+        ];
+      }, [groups, t]);
+      const modelOptions = useMemo(() => {
+        const source =
+          provider === ""
+            ? groups
+            : groups.filter((group) => group.id === provider);
+        const rows = [];
+        for (const group of source)
+          for (const item of Array.isArray(group.models) ? group.models : [])
+            rows.push({
+              value: item.id,
+              label:
+                item.contextWindow === null || item.contextWindow === undefined
+                  ? item.id
+                  : `${item.name ?? item.id} · ${formatCompact(item.contextWindow)}`,
+            });
+        return [
+          { value: "", label: t("settings.placeholder.inherit") },
+          ...rows,
+        ];
+      }, [groups, provider, t]);
+
+      return h(
+        "div",
+        { className: "dts-section" },
+        h(
+          "div",
+          { className: "dts-field" },
+          h(
+            "div",
+            { className: "dts-fieldHead" },
+            h(
+              "span",
+              { className: "dts-fieldKey" },
+              t("settings.field.askAutoAnswer"),
+            ),
+            h("input", {
+              type: "checkbox",
+              className: "dts-check",
+              checked: enabled,
+              disabled: !editable,
+              onChange: (event) =>
+                onPatch({ askAutoAnswer: event.target.checked }),
+            }),
+          ),
+          h(
+            "p",
+            { className: "dts-fieldDesc" },
+            t("settings.fieldDesc.askAutoAnswer"),
+          ),
+          h("p", { className: "dts-fieldDesc" }, t("settings.ask.guard")),
+        ),
+        h(
+          "div",
+          { className: "dts-field" },
+          h(
+            "div",
+            { className: "dts-fieldHead" },
+            h(
+              "span",
+              { className: "dts-fieldKey" },
+              t("settings.field.askPrompt"),
+            ),
+          ),
+          h(
+            "p",
+            { className: "dts-fieldDesc" },
+            t("settings.fieldDesc.askPrompt"),
+          ),
+          h("textarea", {
+            className: "dts-textarea",
+            rows: 10,
+            value: prompt,
+            disabled: !editable,
+            spellCheck: false,
+            onChange: (event) => onPatch({ askPrompt: event.target.value }),
+          }),
+        ),
+        h(
+          "div",
+          { className: "dts-fieldGrid" },
+          h(
+            "div",
+            { className: "dts-field" },
+            h(
+              "div",
+              { className: "dts-fieldHead" },
+              h(
+                "span",
+                { className: "dts-fieldKey" },
+                t("settings.field.askProvider"),
+              ),
+            ),
+            h(
+              "p",
+              { className: "dts-fieldDesc" },
+              t("settings.fieldDesc.askProvider"),
+            ),
+            h(SearchSelect, {
+              options: providerOptions,
+              value: provider,
+              // A provider that does not serve the chosen model fails only when
+              // a question arrives, which is the worst possible moment, so
+              // switching providers clears a model the new one cannot route.
+              onChange: (next) => {
+                const stillServed =
+                  next === "" ||
+                  model === "" ||
+                  groups
+                    .find((group) => group.id === next)
+                    ?.models?.some((item) => item.id === model) === true;
+                onPatch(
+                  stillServed
+                    ? { askProvider: next }
+                    : { askProvider: next, askModel: "" },
+                );
+              },
+              t,
+            }),
+          ),
+          h(
+            "div",
+            { className: "dts-field" },
+            h(
+              "div",
+              { className: "dts-fieldHead" },
+              h(
+                "span",
+                { className: "dts-fieldKey" },
+                t("settings.field.askModel"),
+              ),
+            ),
+            h(
+              "p",
+              { className: "dts-fieldDesc" },
+              t("settings.fieldDesc.askModel"),
+            ),
+            h(SearchSelect, {
+              options: modelOptions,
+              value: model,
+              onChange: (next) => onPatch({ askModel: next }),
+              t,
+            }),
+          ),
+        ),
+        h(
+          "div",
+          { className: "dts-field" },
+          h(
+            "div",
+            { className: "dts-fieldHead" },
+            h(
+              "span",
+              { className: "dts-fieldKey" },
+              t("settings.field.askTimeout"),
+            ),
+          ),
+          h(
+            "p",
+            { className: "dts-fieldDesc" },
+            t("settings.fieldDesc.askTimeout"),
+          ),
+          // -1 is a value, not an empty box: the field has to accept it, so it
+          // is a plain number input rather than anything that treats zero and
+          // negative alike. The schema holds the range; this only refuses to
+          // turn a blank box into Infinity.
+          h("input", {
+            className: "dts-input",
+            type: "number",
+            step: "1",
+            min: "-1",
+            max: "2147483",
+            disabled: !editable,
+            value: String(timeout),
+            onChange: (event) =>
+              onPatch({ askTimeout: Number(event.target.value) || 0 }),
+          }),
+          h("p", { className: "dts-fieldDesc" }, t("settings.askTimeoutHint")),
         ),
       );
     }
@@ -6123,6 +6399,7 @@ window.__ModuleLoader__.load({
         cost: 0,
         compaction: { ops: 0, cost: 0, savedTokens: 0, savingsRatio: null },
         optimizer: { cost: 0, tokens: 0, calls: 0 },
+        answer: { cost: 0, tokens: 0, calls: 0 },
         clear: { ops: 0 },
       };
       // Budget alerts: the four thresholds compare against today's and this
@@ -6289,6 +6566,10 @@ window.__ModuleLoader__.load({
                 "{optimize}",
                 cost(toolUsage.optimizer.cost, billing.currency),
               )
+              // A snapshot written before the answerer existed has no
+              // `answer` block; the card must still render, so the read is
+              // defensive even though the fallback above fills the shape.
+              .replace("{answer}", formatInt(toolUsage.answer?.calls ?? 0))
               .replace("{clear}", formatInt(toolUsage.clear.ops)),
           ].join(" · "),
         }),

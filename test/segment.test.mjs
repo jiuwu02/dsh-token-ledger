@@ -1,15 +1,21 @@
 /**
- * Byte-budget regression (the 2,816,375-byte /compact 413).
+ * Byte-budget regression (the /compact run that never reached a model).
  *
- * A live session failed four /compact attempts with
- * `preflight_compress_failed`: the plugin sized a segment as
- * `contextWindow * 2/3 * 4` UTF-16 characters, producing ONE rendered user
- * message of 2,816,375 UTF-8 bytes, while the fronting proxy enforced a
- * smaller window (180000 tokens) and a hard 2,000,000-byte fuse. Segmentation
- * measured in characters never saw the byte ceiling coming.
+ * A live session failed four /compact attempts with `preflight_compress_failed`:
+ * the plugin sized a segment as `contextWindow * 2/3 * 4` UTF-16 characters, so
+ * ONE rendered user message came out at 2,816,375 UTF-8 bytes. Chinese text
+ * costs roughly 1.09x more bytes than the characters it had been sized in, and
+ * nothing in the pipeline was checking bytes at all.
  *
- * These pins exercise the real exported helpers (schema.js is imported first
- * because the module graph has a circular edge through ledger/billing/store).
+ * The fix is this module's own ceiling, not a number borrowed from whatever
+ * sits between the plugin and the model: `MAX_SEGMENT_BYTES` bounds one
+ * request's core text in UTF-8 bytes, and both summarizer paths (segments on,
+ * and excerpt-only with segments off) measure with it. These pins hold that
+ * ceiling, that the split is lossless, and that a single oversized record is
+ * hard-split rather than sent whole.
+ *
+ * schema.js is imported first because the module graph has a circular edge
+ * through ledger/billing/store.
  */
 
 import assert from "node:assert/strict";
@@ -29,14 +35,18 @@ const {
 } = await load("lib/contextops.js");
 
 const bytes = (text) => Buffer.byteLength(text, "utf8");
-const PROXY_FUSE_BYTES = 2_000_000; // billion-context DOOMED_PROBE_ABSOLUTE_BYTES
+// The module's own density assumption, the one the ceiling is documented in.
+const BYTES_PER_TOKEN = 4;
 
-// --- 1. The model optimistic window can no longer inflate one request ----
-// hy4free declares 960000; the old math produced 2,560,000 chars (~2.8 MB).
+// --- 1. The model's optimistic window can no longer inflate one request ----
+// A model declaring a million tokens used to yield a multi-megabyte message.
 assert.equal(renderBudgetBytes(640000), MAX_SEGMENT_BYTES);
 assert.equal(renderBudgetBytes(null), MAX_SEGMENT_BYTES);
 assert.equal(renderBudgetBytes(0), 4_000); // MIN_EXCERPT_BYTES floor
-assert.ok(MAX_SEGMENT_BYTES < PROXY_FUSE_BYTES);
+assert.ok(
+  Math.ceil(MAX_SEGMENT_BYTES / BYTES_PER_TOKEN) < 200_000,
+  "the ceiling must leave room in a 200k-token window for instruction and prompt",
+);
 
 // --- 2. Chinese text: UTF-16 chars undercounted UTF-8 bytes by ~1.09x ----
 const blocks = [
@@ -49,23 +59,31 @@ for (const segment of segments)
   assert.ok(bytes(segment) <= MAX_SEGMENT_BYTES, "segment exceeds byte ceiling");
 assert.equal(segments.join("\n\n"), blocks.join("\n\n"), "no history lost");
 
-// --- 3. The real failing payload: one 2,816,375-byte rendered message ----
-// Simulates the giant instructionMessage built from the session span.
+// The measured ratio the fix was sized against: a CJK character is three UTF-8
+// bytes but one UTF-16 code unit, so a character budget overshoots by ~1.09x on
+// the mixed text a real session produces.
+const mixed = "中".repeat(100_000);
+assert.ok(bytes(mixed) / mixed.length > 2.9, "CJK costs ~3 bytes per character");
+
+// --- 3. One record past the ceiling is hard-split, never sent whole --------
+// The shape of the record that failed: a single rendered message of ~2.8 MB.
 const doomed = "载".repeat(938_791) + "x"; // ~2,816,375 UTF-8 bytes
 assert.ok(bytes(doomed) > 2_800_000);
 const doomedSegments = splitSegments([doomed], renderBudgetBytes(640000));
 assert.ok(doomedSegments.length > 1, "the oversized record must be hard-split");
 for (const segment of doomedSegments) {
   assert.ok(bytes(segment) <= MAX_SEGMENT_BYTES);
-  assert.ok(bytes(segment) < PROXY_FUSE_BYTES, "would trip the proxy 413 fuse");
   assert.equal(segment, segment.replace(/\uFFFD/g, ""), "no replacement chars");
 }
 assert.equal(doomedSegments.join(""), doomed, "hard-split is lossless");
 
-// --- 4. Even the densest tokenizer estimate stays under the 180000 window --
+// --- 4. Every segment stays inside one request at this module's estimate --
 for (const segment of doomedSegments) {
-  const floorTokens = Math.ceil(bytes(segment) / 7.5);
-  assert.ok(floorTokens < 180000, "segment would exceed the proxy window");
+  const floorTokens = Math.ceil(bytes(segment) / BYTES_PER_TOKEN);
+  assert.ok(
+    floorTokens < 200_000,
+    "segment would not fit a 200k-token window with its instruction",
+  );
 }
 
 // --- 5. split OFF uses the same byte budget (both paths were failing) ----
@@ -88,4 +106,16 @@ const excerpt = buildExcerpt({}, { session: fakeSession }, 640000, t, undefined,
 assert.ok(bytes(excerpt.text) <= MAX_SEGMENT_BYTES + 256, "excerpt over byte ceiling");
 assert.ok(excerpt.omitted > 0, "an over-budget span must drop the oldest records");
 
-console.log("segment ok: byte ceiling, UTF-8, hard-split, proxy fuse, excerpt");
+// --- 6. splitTextByBytes never splits a surrogate pair -------------------
+// Astral characters are two UTF-16 code units and four UTF-8 bytes; slicing by
+// code unit index can land mid-pair and produce a replacement character.
+const emoji = "😀".repeat(100_000);
+const emojiSegments = splitSegments([emoji], 100_000);
+assert.ok(emojiSegments.length > 1);
+for (const segment of emojiSegments) {
+  assert.ok(bytes(segment) <= 100_000);
+  assert.equal(segment, segment.replace(/\uFFFD/g, ""), "no replacement chars");
+}
+assert.equal(emojiSegments.join(""), emoji, "astral split is lossless");
+
+console.log("segment ok: byte ceiling, UTF-8, hard-split, window fit, excerpt, astral");
