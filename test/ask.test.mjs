@@ -41,10 +41,20 @@ const question = (over) => ({
 });
 
 // --- 1. The instruction is a real closing constraint --------------------
+// The default instruction ships in Chinese; these assertions pin the parts
+// the parser and the safety story actually depend on, not the wording:
+// the JSON-only output rule, the cannot-act rule, the escalate form, and the
+// exact schema the prompt promises (which `parseAnswerBatch` must accept).
 assert.ok(DEFAULT_ASK_PROMPT.length > 500, "the default instruction is not a stub");
-assert.match(DEFAULT_ASK_PROMPT, /Emit ONLY one JSON object/u);
-assert.match(DEFAULT_ASK_PROMPT, /no tool may be called/iu);
-assert.match(DEFAULT_ASK_PROMPT, /empty answers array/iu);
+assert.match(DEFAULT_ASK_PROMPT, /只输出一个 JSON 对象/u);
+assert.match(DEFAULT_ASK_PROMPT, /绝不执行动作/u);
+assert.match(DEFAULT_ASK_PROMPT, /\{"answers":\[\]\}/u);
+// The five headings are what the settings dialog and the other two prompts
+// share; a heading that drifts breaks the visual parallel between them.
+assert.deepEqual(
+  DEFAULT_ASK_PROMPT.match(/^#+ .*/gmu).map((line) => line.trim()),
+  ["# 角色定义", "## 核心能力", "## 核心红线", "## 工作流程", "## 交付格式"],
+);
 
 // --- 2. Forbidden zones are refused before any model call --------------
 const forbidden = [

@@ -1,8 +1,8 @@
 {
   "name": "dsh-token-panorama",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "type": "module",
-  "description": "Token panorama for DSH: totals, cache hit rate, peak/off-peak cost, calendar heatmap, session tree, workspaces, CSV/JSON export, plus context clear/compact actions, prompt optimization and automatic answers to ask_user_question batches.",
+  "description": "Token panorama for DSH: totals, cache hit rate, peak/off-peak cost, calendar heatmap, session tree, workspaces, CSV/JSON export, plus context clear/compact actions, prompt optimization, and auto answers for ask_user_question batches.",
   "keywords": [
     "dsh",
     "dsh-plugin",
@@ -16,7 +16,7 @@
     "access": "public"
   },
   "scripts": {
-    "test": "node test/i18n.test.mjs && node test/smoke.test.mjs && node test/scan.test.mjs && node test/stats-reset.test.mjs && node test/segment.test.mjs && node test/truncate.test.mjs && node test/ask.test.mjs"
+    "test": "node test/i18n.test.mjs && node test/smoke.test.mjs && node test/scan.test.mjs && node test/stats-reset.test.mjs && node test/segment.test.mjs && node test/truncate.test.mjs && node test/ask.test.mjs && node test/prompts.test.mjs"
   },
   "repository": {
     "type": "git",

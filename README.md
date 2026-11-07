@@ -1,8 +1,9 @@
 # Token Panorama for DSH
 
 A DeepSeek Harness bundle that shows where every session's tokens go: one panel with lifetime totals, a
-calendar heatmap, a trend chart, a per-model breakdown, a per-session usage table, and CSV/JSON export. Two
-tool groups come with it: context clear/compact buttons, and a prompt optimization button.
+calendar heatmap, a trend chart, a per-model breakdown, a per-session usage table, and CSV/JSON export. Three
+tool groups come with it: context clear/compact buttons, a prompt optimization button, and auto answers for
+`ask_user_question` batches while you are away.
 
 Everything is read from the platform's own session persistence service, so nothing is scraped from logs and no
 third-party dependency is required.
@@ -41,7 +42,10 @@ third-party dependency is required.
 - **Prompt optimization**: an Optimize button in the input box toolbar sends the draft to a configurable
   optimizer model and pastes the rewrite back into the composer; attachments are untouched. The request can
   also carry an excerpt of the session's context, so a prompt that says "this function" rewrites into one that
-  names it. Instruction, route and the context toggle live on the **Prompt optimization** settings tab.
+  names it. Instruction, route and the context toggle live on the **Prompt optimization** settings tab. The
+  model returns the prompt body alone — no code block, no advice outside one — so what lands in the composer
+  is exactly what will be sent; if you rewrite the instruction to ask for a fence, the plugin strips only a
+  fence wrapping the whole answer and any text outside it stays.
 - **Auto answers**: answers an `ask_user_question` batch on your behalf so runs do not stall while you are
   away. Off by default; permission approvals, credentials, irreversible actions, payment and publishing are
   never answered. Instruction, route and wait limit live on the **Auto answers** settings tab.
@@ -109,7 +113,7 @@ in the panel header to edit them online; saving re-prices immediately, with no D
 
 The window edits the config by structure, not by field name: model prices are a table, peak schedules are
 reusable profiles, and holidays are a checklist, none of which a generic key/value editor can express. It has
-six tabs:
+seven tabs:
 
 | Tab | Contents |
 | --- | --- |
@@ -118,6 +122,7 @@ six tabs:
 | **Holidays** | Calendars shipped with the plugin; tick to enable |
 | **Context** | The compaction instruction, its model route, the live context readout, and the automatic and segmented compaction switches |
 | **Prompt optimization** | The optimizer instruction, its model route, and whether the request carries an excerpt of the session's context |
+| **Auto answers** | The answering instruction, its model route, the wait limit, and the master switch |
 | **General** | Billing time zone and currency |
 
 The window can **export** the billing configuration to JSON and **import** a shared one; an import only
@@ -214,9 +219,29 @@ so the card is visible and expandable but never enters the surface: the model's 
 bookkeeping.
 
 The prompt the compaction model reads is editable on the **Context** settings tab, which also picks the
-model's provider and model; leaving those empty inherits the session's. The default prompt asks for the goal,
-decisions and their reasons, verbatim paths and signatures, error text, and open work, and forbids mentioning
-the compaction itself.
+model's provider and model; leaving those empty inherits the session's. The default is a Chinese
+"working-state checkpoint" instruction: it asks for the goal, decisions and their reasons, rejected options,
+verbatim paths and signatures, error text, exact figures and open work, arranged under eight sections, and it
+forbids mentioning the compaction itself.
+
+The three shipped instructions (compaction, optimizer, answers) share one shape: `# 角色定义`,
+`## 核心能力`, `## 核心红线`, `## 工作流程`, `## 交付格式`. They live on three different tabs — Context,
+Prompt optimization, Auto answers — but share the same skeleton, so editing one is a matter of keeping the
+other two aligned. The defaults live in `lib/contextops.js`
+(`DEFAULT_COMPACT_PROMPT`, `DEFAULT_OPTIMIZER_PROMPT`) and `lib/ask.js` (`DEFAULT_ASK_PROMPT`), and
+`test/prompts.test.mjs` pins the three properties worth protecting — the shared five-heading shape,
+half-width punctuation in the instruction itself, and each prompt's own load-bearing clause — so a later
+rewrite cannot drift.
+
+Two clauses follow directly from how the output is consumed:
+
+- **The optimizer instruction asks for no code block.** The rewrite is pasted straight into the composer,
+  and the receiving side only strips a fence that wraps the whole answer. A prompt that asks for "a fenced
+  block plus 1-2 tips outside it" leaves those tips in the draft that is about to be sent.
+- **The compaction instruction's punctuation rule covers only the model's own prose.** Anything reproduced
+  word for word (quoted text, the user's exact words, error messages, code, config values) keeps its original
+  punctuation. This is the same requirement as "reproduce verbatim", stated once. When a split request
+  arrives with a "segment N of M" or "merge" note, that note wins over the whole-conversation wording.
 
 The same tab carries three more things about how much window is left:
 
@@ -306,7 +331,7 @@ holidays as a date array) is migrated on read: the peak half becomes the listed 
 off-peak rate is attached to the `standard` schedule, and the date array folds back into calendar keys. The
 migration is read-only, so the file on disk keeps its old shape until you save from the window.
 
-Every string in the window lives in the `ZH` / `EN` dictionaries in `client.js`, 230 keys with identical key
+Every string in the window lives in the `ZH` / `EN` dictionaries in `client.js`, 285 keys with identical key
 sets across both languages.
 
 Saving goes through the platform's `configEditor` service, which validates the schema, writes the whole config
@@ -450,8 +475,10 @@ lib/scan.js         Folding session events into hour × model slots
 lib/schema.js       Config schema, default price sheet, field descriptions
 lib/billing.js      Peak rules, pricing, legacy-config migrations
 lib/holidays.js     Network fetch, per-year cache, built-in seed
-lib/contextops.js   Surface replacement for clear / compact, the real three-part measurement, and segmentation
-lib/ask.js          The question answerer: forbidden-zone screen, answer validation, the answering model call
+lib/contextops.js   Surface replacement for clear / compact, the real three-part measurement, segmentation,
+                    and the compaction/optimizer default instructions
+lib/ask.js          The question answerer: forbidden-zone screen, answer validation, the answering model call,
+                    and its default instruction
 lib/store.js        Revision-keyed cache, the frame-level scan, and the snapshot (per day / per model)
 lib/frames.js       Walking a stored log's Zstandard frames to decode only what is new
 lib/projection.js   The tokenPanoramaUsage projection unit the Host keeps current
